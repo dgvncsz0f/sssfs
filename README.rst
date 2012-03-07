@@ -1,6 +1,6 @@
 ==============================
  sssfs: Amazon S3 File System
-===============================
+==============================
 
 Introduction
 ============
@@ -23,7 +23,7 @@ Design Decisions
 
 Inspired by UNIX filesystem design, a file is represented by a
 structure similar to an inode. This structure, heavily inspired by the
-stat structurem, contains:
+stat structure, contains:
 
 * id;
 * file type;
