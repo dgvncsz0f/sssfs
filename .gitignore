@@ -1,0 +1,6 @@
+*.*~
+*.hi
+*.o
+.#*
+src/sssfs
+README.html
