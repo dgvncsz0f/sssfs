@@ -14,7 +14,7 @@ data CFSExcept = CFSExcept
 
 -- | Uncatchable exceptions
 data SysExcept = SysExcept String
-               | ParseExcept
+               | ParseExcept String
                deriving (Show, Typeable)
 
 data UsrExcept = NotFound

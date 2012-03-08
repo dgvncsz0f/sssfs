@@ -42,7 +42,7 @@ readContent file = do { h <- openBinaryFile file ReadMode
                       ; return r
                       }
 
-chroot :: FilePath -> Loc -> FilePath
+chroot :: FilePath -> Key -> FilePath
 chroot root l
   | isAbsolute path = root </> (tail path)
   | otherwise       = root </> path
@@ -54,7 +54,7 @@ instance Storage LocalStorage where
   
   get (LocalStorage root) k = readContent (chroot root k)
   
-  stat (LocalStorage root) k = doesFileExist (chroot root k)
+  head (LocalStorage root) k = doesFileExist (chroot root k)
   
   enum (LocalStorage root) k = let path = chroot root k
-                               in fmap (map loc2) (getDirectoryContents path)
+                               in fmap (map fromStr) (getDirectoryContents path)

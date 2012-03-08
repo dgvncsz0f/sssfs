@@ -4,14 +4,14 @@
 module SSSFS.Storage
        ( -- | Types
          Ref(..)
-       , Loc
+       , Key
        , Payload
        , Storage(..)
-         -- | Ref/Loc Functions
+         -- | Ref/Key Functions
        , ref
-       , loc
-       , loc2
-       , showLoc
+       , fromRef
+       , fromStr
+       , showKey
          -- | Iteratee
        , enumKey
          -- | Misc
@@ -32,34 +32,34 @@ import           GHC.Exts
 newtype Ref   = Ref { unRef :: T.Text }
               deriving (Eq,Ord,Show)
 
-type Loc      = [Ref]
+type Key      = [Ref]
 
 type Payload  = B.ByteString
 
-showLoc :: Loc -> T.Text
-showLoc = ("/" `T.append`) . T.intercalate "/" . map unRef
+showKey :: Key -> T.Text
+showKey = ("/" `T.append`) . T.intercalate "/" . map unRef
 
 ref :: String -> Ref
 ref = Ref . T.pack
 
-loc :: Ref -> Loc
-loc = (:[])
+fromRef :: Ref -> Key
+fromRef = (:[])
 
-loc2 :: String -> Loc
-loc2 = (:[]) . ref
+fromStr :: String -> Key
+fromStr = (:[]) . ref
            
 -- | The primitives that every storage needs to supply.
 class Storage s where
   
   -- | Writes content and makes it available under a given location.
-  put  :: s -> Loc -> Payload -> IO ()
+  put  :: s -> Key -> Payload -> IO ()
   
   -- | Returns the latest payload information associated with a given
   -- location.
-  get  :: s -> Loc -> IO Payload
+  get  :: s -> Key -> IO Payload
   
   -- | Checks whether or a not a given resource is available.
-  stat :: s -> Loc -> IO Bool
+  head :: s -> Key -> IO Bool
   
   -- | Enumerates all locations that are proper prefixes of a given
   -- location. If you consider locations hierarchically, then a proper
@@ -69,13 +69,15 @@ class Storage s where
   -- enum [foo] = [bar,baz].
   -- 
   -- There is no well defined ordering for the results.
-  enum :: s -> Loc -> IO [Loc]
+  enum :: s -> Key -> IO [Key]
 
-enumKey :: (MonadIO m, Storage s) => s -> Loc -> Onum B.ByteString m ()
+-- | Provides an enumerator for the contents of a given key.
+enumKey :: (MonadIO m, Storage s) => s -> Key -> Onum B.ByteString m ()
 enumKey s l = mkInumC id noCtl (liftIO $ get s l)
 
-computeHash :: B.ByteString -> Loc
-computeHash = loc2 . render . hexdumpBy "" 64 . hash . B.unpack
+-- | Currently computes the sha256 of a given bytestring.
+computeHash :: B.ByteString -> Key
+computeHash = fromStr . render . hexdumpBy "" 64 . hash . B.unpack
 
 instance IsString Ref where
   fromString = Ref . T.pack

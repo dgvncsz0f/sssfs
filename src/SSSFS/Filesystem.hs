@@ -3,25 +3,55 @@
 
 module SSSFS.Filesystem 
        ( mkfs
+       , stat
        ) where
 
-import           SSSFS.Config
-import           SSSFS.Storage
-import           SSSFS.Filesystem.Types
+import Control.Exception
+import System.FilePath
+import SSSFS.Config
+import SSSFS.Storage
+import SSSFS.Except
+import SSSFS.Filesystem.Types
 
-putUnit :: (Storage s) => s -> StorageUnit -> IO Loc
-putUnit s u = put s (key u) (value u) >> return (key u)
+type MakeKey = Either Key (OID -> Key) -> Key
 
-putUnit_ :: (Storage s) => s -> StorageUnit -> IO ()
-putUnit_ s u = put s (key u) (value u)
+makeKey :: (Maybe OID) -> MakeKey
+makeKey _ (Left k)         = k
+makeKey Nothing (Right _)  = error "cant create key without oid"
+makeKey (Just o) (Right f) = f o
 
-getUnit :: (Storage s) => s -> Loc -> IO StorageUnit
+putUnit :: (Storage s) => s -> StorageUnit -> MakeKey -> IO Key
+putUnit s u f = let k = f $ fromStorageUnit u
+                in put s k (value u) >> return k
+
+putUnit_ :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
+putUnit_ s u f = put s (f $ fromStorageUnit u) (value u)
+
+getUnit :: (Storage s) => s -> Key -> IO StorageUnit
 getUnit s l = get s l >>= eulavM
 
+follow :: (Storage s) => s -> Key -> IO INode
+follow s l = getUnit s l >>= followUM
+  where followU (INodePtrUnit _ l2) = fmap inodeUnitToINode (getUnit s l2)
+        followU (DirEntUnit _ l2)   = fmap inodeUnitToINode (getUnit s (fromOID l2))
+        followU _                   = return Nothing
+        
+        followUM u = do { mv <- followU u
+                        ; case mv 
+                          of Nothing
+                               -> throw NotFound
+                             Just v
+                               -> return v
+                        }
+
+-- | Initializes a new filesystem. This is a very fast operation. It
+-- creates a new inode with no contents and changes the root inode
+-- ptr, which will point to the newly created inode. Therefore old
+-- data will still be preserved but from now on is unreachable.
 mkfs :: (Storage s) => s -> IO ()
 mkfs s = do { inum <- fmap mkINode now
-            ; l    <- putUnit s (inodeToINodeUnit inum)
-            ; putUnit_ s (inodeToINodePtrUnit inum l)
+            ; l    <- putUnit s (inodeToINodeUnit inum) (makeKey Nothing)
+            ; putUnit_ s (inodeToINodePtrUnit inum l) (makeKey Nothing)
             }
   where mkINode time = INode { inode  = oidOne
                              , atime  = time
@@ -33,11 +63,11 @@ mkfs s = do { inum <- fmap mkINode now
                              , blocks = []
                              }
 
-statRef :: (Storage s) => s -> (INode,String) -> IO INode
-statRef s par name = do { tmpFile <- return "/tmp/foobar.cdb" -- enumINode |. tmpfileI
-                        ; 
-                        }
-
--- stat :: (Throws SysExcept e, Throws UsrExcept e, Storage s) => s -> Loc -> EMT e IO INode
--- stat s (_:path) = getUnit s locOne >>= statWith
---   where statWith parent (p:ps) = 
+-- | This operation is only definde for absolute paths.
+stat :: (Storage s) => s -> FilePath -> IO INode
+stat s p = do { root <- follow s keyOne
+              ; stat_ root (tail $ map dropTrailingPathSeparator (splitPath p))
+              }
+  where stat_ inum []     = return inum
+        stat_ inum (x:xs) = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
+        
