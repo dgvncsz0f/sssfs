@@ -83,13 +83,14 @@ decision.
 The first idea was to represent the directories using some data
 structure like a /BTree/ or a /Hash/. Conflicts would be solved using
 a merge algorithm, and if the conflict couldn't be solved by the
-merging algorithm, say two updates on the file, the latest transaction
+merging algorithm, say two concurrent updates on the same file, the
+latest transaction, i.e., the one with the most recent timestamp,
 would win.
 
-The problem with this approach is that s3 makes no guarantees when an
-object will be available. Then we might miss the conflict, leaving the
-resolution for the s3 itself. Thus, great potential for huge data
-losses.
+The main problem with this approach is that s3 makes no guarantees
+when an object will be available. Then we might miss the conflict,
+leaving the resolution for the s3 itself. Thus, great potential for
+huge data losses.
 
 The other ideas were all some variation of this and do not deserve to
 be mentioned.
@@ -122,6 +123,10 @@ Changing directory contents is relatively cheap, but we loose
 /copy-on-write/ feature for directories. There are other drawbacks
 too, but in the end of the day this seems to be the best
 representation so far.
+
+Why not create a 1:1 relation to the path, say creating a resource
+`/foo/bar/foobar` directly in s3. Well, there are a couple of reasons
+one should not do this, the most obvious being /RENAME/ operations.
 
 TODOS
 =====
