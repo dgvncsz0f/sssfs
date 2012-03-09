@@ -7,6 +7,9 @@ import SSSFS.Storage.Debug as D
 main :: IO ()
 main = let s = D.new (L.new "/home/dsouza/tmp/sssfs")
        in do { mkfs s
-             ; _ <- mkdir s "/foobar"
-             ; stat s "/foobar" >>= print
+             ; _ <- mkdir s "/foo"
+             ; _ <- mkdir s "/foo/bar"
+             ; _ <- mkdir s "/foo/bar/foobar"
+             ; _ <- creat s "/foo/bar/foobar/file"
+             ; stat s "/foo/bar/foobar" >>= print
              }

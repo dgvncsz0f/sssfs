@@ -12,14 +12,15 @@ import           Control.Exception
 data CFSExcept = CFSExcept 
                deriving (Show, Typeable)
 
--- | Uncatchable exceptions
 data SysExcept = SysExcept String
                | ParseExcept String
+               | ObjectNotFound String
                deriving (Show, Typeable)
 
-data UsrExcept = NotFound
+data IOExcept = NotFound String
+              | NotADirectory String
                deriving (Show, Typeable)
 
 instance Exception CFSExcept
 instance Exception SysExcept
-instance Exception UsrExcept
+instance Exception IOExcept

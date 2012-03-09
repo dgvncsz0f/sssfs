@@ -5,9 +5,12 @@ module SSSFS.Filesystem
        ( mkfs
        , stat
        , mkdir
+       , creat
+       , mknod
        ) where
 
 import Control.Applicative
+import Control.Monad
 import Control.Exception
 import Data.Maybe
 import System.FilePath
@@ -49,7 +52,7 @@ follow s l = getUnit s l >>= followUM
         followUM u = do { mv <- followU u
                         ; case mv 
                           of Nothing
-                               -> throw NotFound
+                               -> throw (ParseExcept $ "INodePtrUnit or DirEntUnit expected ["++ showKeyS l ++"]")
                              Just v
                                -> return v
                         }
@@ -80,24 +83,43 @@ mkfs s = do { inum <- mkINode (Just oidOne) Directory
             }
 
 mkdir :: (Storage s) => s -> FilePath -> IO INode
-mkdir s path = do { p_inum <- stat s dirname
-                  ; inum   <- mkINode Nothing Directory
-                  ; l      <- putUnit s (inodeToINodeUnit inum) makeKey_
-                  ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
-                  ; putUnit_ s (inodeToDirEntUnit name inum) (makeKey1 (inode p_inum))
-                  ; return inum
-                  }
-  where dirname = takeDirectory (dropTrailingPathSeparator path)
-        name    = takeFileName (dropTrailingPathSeparator path)
+mkdir s path = mknod s path Directory
+
+creat :: (Storage s) => s -> FilePath -> IO INode
+creat s path = mknod s path File
+
+-- | Creates a new entry on a given directory. The dirname of this
+-- path must already be defined and must be a directory already.
+-- 
+-- This function does not check if there is a link already. It will
+-- get overwritten with no mercy. Make sure you do this before calling
+-- mknod.
+mknod :: (Storage s) => s -> FilePath -> IType -> IO INode
+mknod s path ftype = do { p_inum <- stat s (dirname path)
+                        ; when (not $ isDirectory p_inum) (throw (NotADirectory $ dirname path))
+                        ; inum   <- mkINode Nothing ftype
+                        ; l      <- putUnit s (inodeToINodeUnit inum) makeKey_
+                        ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
+                        ; putUnit_ s (inodeToDirEntUnit (basename path) inum) (makeKey1 (inode p_inum))
+                        ; return inum
+                        }
 
 -- | This operation is only defined for absolute paths. The behavior
 -- is undefined if you provide a relative path.
 stat :: (Storage s) => s -> FilePath -> IO INode
 stat s p = do { root <- follow s keyOne
-              ; stat_ root (tail $ map dropTrailingPathSeparator (splitPath p))
+              ; stat_ root (tail $ safeSplitPath p)
               }
   where stat_ inum []        = return inum
         stat_ inum (x:xs) 
           | isDirectory inum = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
-          | otherwise        = throw NotFound
+          | otherwise        = throw (NotADirectory p)
         
+safeSplitPath :: FilePath -> [FilePath]
+safeSplitPath = map dropTrailingPathSeparator . splitPath
+
+dirname :: FilePath -> FilePath
+dirname = joinPath . init . safeSplitPath
+
+basename :: FilePath -> FilePath
+basename = last . safeSplitPath
