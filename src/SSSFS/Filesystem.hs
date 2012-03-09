@@ -54,6 +54,7 @@ mkfs s = do { inum <- fmap mkINode now
             ; putUnit_ s (inodeToINodePtrUnit inum l) (makeKey Nothing)
             }
   where mkINode time = INode { inode  = oidOne
+                             , itype  = Directory
                              , atime  = time
                              , ctime  = time
                              , mtime  = time
@@ -63,11 +64,14 @@ mkfs s = do { inum <- fmap mkINode now
                              , blocks = []
                              }
 
--- | This operation is only definde for absolute paths.
+-- | This operation is only defined for absolute paths. The behavior
+-- is undefined if you provide a relative path.
 stat :: (Storage s) => s -> FilePath -> IO INode
 stat s p = do { root <- follow s keyOne
               ; stat_ root (tail $ map dropTrailingPathSeparator (splitPath p))
               }
-  where stat_ inum []     = return inum
-        stat_ inum (x:xs) = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
+  where stat_ inum []        = return inum
+        stat_ inum (x:xs) 
+          | isDirectory inum = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
+          | otherwise        = throw NotFound
         

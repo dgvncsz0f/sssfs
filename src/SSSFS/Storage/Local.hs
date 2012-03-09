@@ -42,10 +42,15 @@ readContent file = do { h <- openBinaryFile file ReadMode
                       ; return r
                       }
 
+rewritePath :: FilePath -> FilePath
+rewritePath = joinPath . rewrite . splitPath
+  where rewrite [s]    = ['f' : s]
+        rewrite (x:xs) = ('d' : x) : rewrite xs
+
 chroot :: FilePath -> Key -> FilePath
 chroot root l
-  | isAbsolute path = root </> (tail path)
-  | otherwise       = root </> path
+  | isAbsolute path = root </> (rewritePath $ dropWhile (`elem` pathSeparators) path)
+  | otherwise       = root </> (rewritePath path)
     where path = T.unpack $ T.intercalate "/" (map unRef l)
 
 instance Storage LocalStorage where

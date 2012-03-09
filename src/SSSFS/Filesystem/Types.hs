@@ -12,6 +12,10 @@ module SSSFS.Filesystem.Types
        , DataBlock(..)
        , INode(..)
        , StorageUnit(..)
+       , IType(..)
+         -- | IType Functions
+       , isFile
+       , isDirectory
          -- | Metadata String Functions
        , encode
        , decode
@@ -67,9 +71,20 @@ type Metadata = [(B.ByteString, B.ByteString)]
 -- 
 data DataBlock = Direct { addr :: Key }
 
+data IType = File
+           | Directory
+           deriving (Eq)
+
+isFile :: INode -> Bool
+isFile = (==File) . itype
+
+isDirectory :: INode -> Bool
+isDirectory = (==Directory) . itype
+
 -- | The information about an object in the filesystem. This mimics
 -- the tradicional UNIX inode data structure.
 data INode = INode { inode  :: OID         -- ^ Unique id of this inode
+                   , itype  :: IType       -- ^ The type of this file (e.g. File, Directory)
                    , atime  :: Timestamp   -- ^ Access time
                    , ctime  :: Timestamp   -- ^ Creation time
                    , mtime  :: Timestamp   -- ^ Modification time
@@ -152,6 +167,7 @@ eulavM raw = case (eulav raw)
 
 inodeToINodeUnit :: INode -> StorageUnit
 inodeToINodeUnit i = let core = [ (encode "inode", inode i)
+                                , (encode "itype", S.encode (itype i))
                                 , (encode "atime", S.encode (atime i))
                                 , (encode "ctime", S.encode (ctime i))
                                 , (encode "mtime", S.encode (mtime i))
@@ -164,6 +180,7 @@ inodeToINodeUnit i = let core = [ (encode "inode", inode i)
 
 inodeUnitToINode :: StorageUnit -> Maybe INode
 inodeUnitToINode (INodeUnit c u) = INode <$> (lookup "inode" core)
+                                         <*> (lookup "itype" core >>= eulavM)
                                          <*> (lookup "atime" core >>= eulavM)
                                          <*> (lookup "ctime" core >>= eulavM)
                                          <*> (lookup "mtime" core >>= eulavM)
@@ -184,6 +201,17 @@ enumBlocks s (b:bs) = enumKey s (addr b) `lcat` (enumBlocks s bs)
 
 enumINode :: (MonadIO m, Storage s) => s -> INode -> Onum B.ByteString m ()
 enumINode s = enumBlocks s . blocks
+
+instance S.Serialize IType where
+  put File      = S.putWord16le 0
+  put Directory = S.putWord16le 1
+  
+  get = do { opcode <- S.getWord16le
+           ; case opcode
+             of 0 -> return File
+                1 -> return Directory
+                _ -> fail "unknow opcode"
+           }
 
 instance S.Serialize StorageUnit where
   put (INodeUnit c u) = 
