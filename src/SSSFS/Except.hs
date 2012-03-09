@@ -1,6 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable    #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 module SSSFS.Except
        where

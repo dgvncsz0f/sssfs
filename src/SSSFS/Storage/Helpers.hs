@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module SSSFS.Storage.Helpers
        ( transfer
        , transferIf

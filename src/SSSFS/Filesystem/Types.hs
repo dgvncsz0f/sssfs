@@ -1,8 +1,4 @@
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE DeriveDataTypeable    #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 
 module SSSFS.Filesystem.Types
        ( -- | Types
@@ -13,7 +9,9 @@ module SSSFS.Filesystem.Types
        , INode(..)
        , StorageUnit(..)
        , IType(..)
-         -- | IType Functions
+         -- | INode functions
+       , mkINode
+       , ensureDirectory
        , isFile
        , isDirectory
          -- | Metadata String Functions
@@ -41,7 +39,7 @@ module SSSFS.Filesystem.Types
        , inodeToINodePtrUnit
        , inodeToDirEntUnit
        , inodeUnitToINode
-         -- | Iteratees
+         -- | IO
        , enumINode
        ) where
 
@@ -58,6 +56,7 @@ import           Data.Text.Encoding
 import           Data.IterIO
 import qualified Data.Serialize as S
 import           System.Posix.Clock
+import           SSSFS.Config
 import           SSSFS.Except
 import           SSSFS.Storage
 
@@ -168,6 +167,21 @@ eulavM raw = case (eulav raw)
                 Right u
                   -> return u
 
+mkINode :: Maybe OID -> IType -> IO INode
+mkINode moid ftype = do { time  <- now
+                        ; moid2 <- fmap pure newid
+                        ; return $ INode { inode  = fromJust (moid <|> moid2)
+                                         , itype  = ftype
+                                         , atime  = time
+                                         , ctime  = time
+                                         , mtime  = time
+                                         , meta   = []
+                                         , size   = 0
+                                         , blksz  = blockSize
+                                         , blocks = []
+                                         }
+                       }
+
 inodeToDirEntUnit :: String -> INode -> StorageUnit
 inodeToDirEntUnit n i = DirEntUnit n (inode i)
 
@@ -207,6 +221,11 @@ enumBlocks s (b:bs) = enumKey s (addr b) `lcat` (enumBlocks s bs)
 
 enumINode :: (MonadIO m, Storage s) => s -> INode -> Onum B.ByteString m ()
 enumINode s = enumBlocks s . blocks
+
+ensureDirectory :: FilePath -> INode -> INode
+ensureDirectory path inum
+  | isDirectory inum = inum 
+  | otherwise        = throw $ NotADirectory path
 
 instance S.Serialize IType where
   put File      = S.putWord16le 0
@@ -249,18 +268,17 @@ instance S.Serialize StorageUnit where
             3 -> getDirEntUnit
             _ -> fail "unknown opcode"
        }
-    where 
-          getINodeUnit     = do { core <- S.get
-                                ; user <- S.get
-                                ; return (INodeUnit core user)
-                                }
+    where getINodeUnit = do { core <- S.get
+                            ; user <- S.get
+                            ; return (INodeUnit core user)
+                            }
           
           getDataBlockUnit = fmap DataBlockUnit S.get
           
-          getINodePtrUnit  = do { o <- S.get
-                                ; l <- S.get
-                                ; return (INodePtrUnit o l)
-                                }
+          getINodePtrUnit = do { o <- S.get
+                               ; l <- S.get
+                               ; return (INodePtrUnit o l)
+                               }
           
           getDirEntUnit = do { n <- S.get
                              ; o <- S.get

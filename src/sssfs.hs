@@ -1,6 +1,8 @@
 module Main where
 
-import SSSFS.Filesystem
+import SSSFS.Filesystem.Core
+import SSSFS.Filesystem.Files
+import SSSFS.Filesystem.Directory
 import SSSFS.Storage.Local as L
 import SSSFS.Storage.Debug as D
 
