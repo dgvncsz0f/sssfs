@@ -66,6 +66,9 @@ class Storage s where
   -- location.
   get  :: s -> Key -> IO Payload
   
+  -- | Deletes a given resource
+  del  :: s -> Key -> IO ()
+  
   -- | Checks whether or a not a given resource is available.
   head :: s -> Key -> IO Bool
   

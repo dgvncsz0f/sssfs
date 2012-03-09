@@ -24,6 +24,10 @@ instance (Storage s) => Storage (DebugStorage s) where
                               ; return v
                               }
   
+  del (DebugStorage s) k = do { debug ("del " ++ showKeyS k)
+                              ; del s k
+                              }
+  
   head (DebugStorage s) k = do { v <- S.head s k
                                ; debug ("head " ++ showKeyS k ++ " - " ++ show v)
                                ; return v

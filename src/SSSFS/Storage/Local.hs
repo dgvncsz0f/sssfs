@@ -69,6 +69,8 @@ instance Storage LocalStorage where
   
   get (LocalStorage root) k = readContent (chroot_ root k)
   
+  del (LocalStorage root) k = removeFile (chroot_ root k)
+  
   head (LocalStorage root) k = doesFileExist (chroot_ root k)
   
   enum (LocalStorage root) k = let path       = chroot root k encodePathDir
