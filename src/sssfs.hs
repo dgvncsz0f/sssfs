@@ -1,11 +1,12 @@
 module Main where
 
 import SSSFS.Filesystem
-import SSSFS.Filesystem.Types
-import SSSFS.Storage.Local
+import SSSFS.Storage.Local as L
+import SSSFS.Storage.Debug as D
 
 main :: IO ()
-main = let s = new "/home/dsouza/tmp/sssfs"
+main = let s = D.new (L.new "/home/dsouza/tmp/sssfs")
        in do { mkfs s
-             ; stat s "/" >>= print . inode
+             ; _ <- mkdir s "/foobar"
+             ; stat s "/foobar" >>= print
              }

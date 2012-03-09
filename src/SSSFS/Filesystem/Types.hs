@@ -39,6 +39,7 @@ module SSSFS.Filesystem.Types
        , eulavM
        , inodeToINodeUnit
        , inodeToINodePtrUnit
+       , inodeToDirEntUnit
        , inodeUnitToINode
          -- | Iteratees
        , enumINode
@@ -70,16 +71,11 @@ type Metadata = [(B.ByteString, B.ByteString)]
 -- | A data block is a pointer to a chunk of data.
 -- 
 data DataBlock = Direct { addr :: Key }
+               deriving (Eq,Show)
 
 data IType = File
            | Directory
-           deriving (Eq)
-
-isFile :: INode -> Bool
-isFile = (==File) . itype
-
-isDirectory :: INode -> Bool
-isDirectory = (==Directory) . itype
+           deriving (Eq,Show)
 
 -- | The information about an object in the filesystem. This mimics
 -- the tradicional UNIX inode data structure.
@@ -93,6 +89,7 @@ data INode = INode { inode  :: OID         -- ^ Unique id of this inode
                    , size   :: Integer     -- ^ Size of this file in bytes
                    , blocks :: [DataBlock] -- ^ The actual file contents
                    }
+           deriving (Eq,Show)
 
 data StorageUnit = INodeUnit Metadata Metadata
                  | DataBlockUnit B.ByteString
@@ -112,6 +109,12 @@ now :: IO Timestamp
 now = do { t <- getTime Realtime
          ; return (sec t, nsec t)
          }
+
+isFile :: INode -> Bool
+isFile = (==File) . itype
+
+isDirectory :: INode -> Bool
+isDirectory = (==Directory) . itype
 
 encode :: T.Text -> B.ByteString
 encode = encodeUtf8
@@ -164,6 +167,9 @@ eulavM raw = case (eulav raw)
                   -> throw (ParseExcept msg)
                 Right u
                   -> return u
+
+inodeToDirEntUnit :: String -> INode -> StorageUnit
+inodeToDirEntUnit n i = DirEntUnit n (inode i)
 
 inodeToINodeUnit :: INode -> StorageUnit
 inodeToINodeUnit i = let core = [ (encode "inode", inode i)

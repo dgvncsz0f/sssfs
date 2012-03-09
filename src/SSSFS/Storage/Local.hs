@@ -44,7 +44,8 @@ readContent file = do { h <- openBinaryFile file ReadMode
 
 rewritePath :: FilePath -> FilePath
 rewritePath = joinPath . rewrite . splitPath
-  where rewrite [s]    = ['f' : s]
+  where rewrite []     = []
+        rewrite [s]    = ['f' : s]
         rewrite (x:xs) = ('d' : x) : rewrite xs
 
 chroot :: FilePath -> Key -> FilePath

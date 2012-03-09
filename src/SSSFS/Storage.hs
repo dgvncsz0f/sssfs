@@ -12,6 +12,7 @@ module SSSFS.Storage
        , fromRef
        , fromStr
        , showKey
+       , showKeyS
          -- | Iteratee
        , enumKey
          -- | Misc
@@ -39,6 +40,9 @@ type Payload  = B.ByteString
 showKey :: Key -> T.Text
 showKey = ("/" `T.append`) . T.intercalate "/" . map unRef
 
+showKeyS :: Key -> String
+showKeyS = T.unpack . showKey
+           
 ref :: String -> Ref
 ref = Ref . T.pack
 

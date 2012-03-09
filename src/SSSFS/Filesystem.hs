@@ -4,9 +4,12 @@
 module SSSFS.Filesystem 
        ( mkfs
        , stat
+       , mkdir
        ) where
 
+import Control.Applicative
 import Control.Exception
+import Data.Maybe
 import System.FilePath
 import SSSFS.Config
 import SSSFS.Storage
@@ -20,12 +23,19 @@ makeKey _ (Left k)         = k
 makeKey Nothing (Right _)  = error "cant create key without oid"
 makeKey (Just o) (Right f) = f o
 
+makeKey_ :: MakeKey
+makeKey_ = makeKey Nothing
+
+makeKey1 :: OID -> MakeKey
+makeKey1 = makeKey . Just
+
 putUnit :: (Storage s) => s -> StorageUnit -> MakeKey -> IO Key
 putUnit s u f = let k = f $ fromStorageUnit u
                 in put s k (value u) >> return k
 
 putUnit_ :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
-putUnit_ s u f = put s (f $ fromStorageUnit u) (value u)
+putUnit_ s u f = let k = f $ fromStorageUnit u
+                 in put s k (value u)
 
 getUnit :: (Storage s) => s -> Key -> IO StorageUnit
 getUnit s l = get s l >>= eulavM
@@ -33,7 +43,7 @@ getUnit s l = get s l >>= eulavM
 follow :: (Storage s) => s -> Key -> IO INode
 follow s l = getUnit s l >>= followUM
   where followU (INodePtrUnit _ l2) = fmap inodeUnitToINode (getUnit s l2)
-        followU (DirEntUnit _ l2)   = fmap inodeUnitToINode (getUnit s (fromOID l2))
+        followU (DirEntUnit _ o)    = getUnit s (fromOID o) >>= followU
         followU _                   = return Nothing
         
         followUM u = do { mv <- followU u
@@ -44,25 +54,41 @@ follow s l = getUnit s l >>= followUM
                                -> return v
                         }
 
+mkINode :: Maybe OID -> IType -> IO INode
+mkINode moid ftype = do { time  <- now
+                        ; moid2 <- fmap pure newid
+                        ; return $ INode { inode  = fromJust (moid <|> moid2)
+                                         , itype  = ftype
+                                         , atime  = time
+                                         , ctime  = time
+                                         , mtime  = time
+                                         , meta   = []
+                                         , size   = 0
+                                         , blksz  = blockSize
+                                         , blocks = []
+                                         }
+                       }
+
 -- | Initializes a new filesystem. This is a very fast operation. It
 -- creates a new inode with no contents and changes the root inode
 -- ptr, which will point to the newly created inode. Therefore old
 -- data will still be preserved but from now on is unreachable.
 mkfs :: (Storage s) => s -> IO ()
-mkfs s = do { inum <- fmap mkINode now
-            ; l    <- putUnit s (inodeToINodeUnit inum) (makeKey Nothing)
-            ; putUnit_ s (inodeToINodePtrUnit inum l) (makeKey Nothing)
+mkfs s = do { inum <- mkINode (Just oidOne) Directory
+            ; l    <- putUnit s (inodeToINodeUnit inum) makeKey_
+            ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
             }
-  where mkINode time = INode { inode  = oidOne
-                             , itype  = Directory
-                             , atime  = time
-                             , ctime  = time
-                             , mtime  = time
-                             , meta   = []
-                             , size   = 0
-                             , blksz  = blockSize
-                             , blocks = []
-                             }
+
+mkdir :: (Storage s) => s -> FilePath -> IO INode
+mkdir s path = do { p_inum <- stat s dirname
+                  ; inum   <- mkINode Nothing Directory
+                  ; l      <- putUnit s (inodeToINodeUnit inum) makeKey_
+                  ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
+                  ; putUnit_ s (inodeToDirEntUnit name inum) (makeKey1 (inode p_inum))
+                  ; return inum
+                  }
+  where dirname = takeDirectory (dropTrailingPathSeparator path)
+        name    = takeFileName (dropTrailingPathSeparator path)
 
 -- | This operation is only defined for absolute paths. The behavior
 -- is undefined if you provide a relative path.
