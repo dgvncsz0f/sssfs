@@ -42,25 +42,36 @@ readContent file = do { h <- openBinaryFile file ReadMode
                       ; return r
                       }
 
-rewritePath :: FilePath -> FilePath
-rewritePath = joinPath . rewrite . splitPath
+encodePath :: FilePath -> FilePath
+encodePath = joinPath . rewrite . splitPath
   where rewrite []     = []
         rewrite [s]    = ['f' : s]
         rewrite (x:xs) = ('d' : x) : rewrite xs
 
-chroot :: FilePath -> Key -> FilePath
-chroot root l
-  | isAbsolute path = root </> (rewritePath $ dropWhile (`elem` pathSeparators) path)
-  | otherwise       = root </> (rewritePath path)
-    where path = T.unpack $ T.intercalate "/" (map unRef l)
+encodePathDir :: FilePath -> FilePath
+encodePathDir = joinPath . map ('d':) . splitPath
+
+decodePath :: FilePath -> FilePath
+decodePath = tail
+
+chroot :: FilePath -> Key -> (FilePath -> FilePath) -> FilePath
+chroot root l f
+  | isAbsolute path = root </> (f $ dropWhile (`elem` pathSeparators) path)
+  | otherwise       = root </> (f path)
+    where path = T.unpack $ T.intercalate "/" (map showRef l)
+
+chroot_ :: FilePath -> Key -> FilePath
+chroot_ root l = chroot root l encodePath
 
 instance Storage LocalStorage where
   
-  put (LocalStorage root) k v = atomicWrite (chroot root k) v
+  put (LocalStorage root) k v = atomicWrite (chroot_ root k) v
   
-  get (LocalStorage root) k = readContent (chroot root k)
+  get (LocalStorage root) k = readContent (chroot_ root k)
   
-  head (LocalStorage root) k = doesFileExist (chroot root k)
+  head (LocalStorage root) k = doesFileExist (chroot_ root k)
   
-  enum (LocalStorage root) k = let path = chroot root k
-                               in fmap (map fromStr) (getDirectoryContents path)
+  enum (LocalStorage root) k = let path       = chroot root k encodePathDir
+                                   decode     = map (ref . decodePath)
+                                   filterList = filter (`notElem` [".",".."])
+                               in fmap (decode . filterList) (getDirectoryContents path)

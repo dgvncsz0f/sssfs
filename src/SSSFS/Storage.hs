@@ -11,6 +11,7 @@ module SSSFS.Storage
        , ref
        , fromRef
        , fromStr
+       , showRefS
        , showKey
        , showKeyS
          -- | Iteratee
@@ -30,7 +31,7 @@ import           Data.Digest.SHA256
 import           Text.PrettyPrint.HughesPJ (render)
 import           GHC.Exts
 
-newtype Ref   = Ref { unRef :: T.Text }
+newtype Ref   = Ref { showRef :: T.Text }
               deriving (Eq,Ord,Show)
 
 type Key      = [Ref]
@@ -38,11 +39,14 @@ type Key      = [Ref]
 type Payload  = B.ByteString
 
 showKey :: Key -> T.Text
-showKey = ("/" `T.append`) . T.intercalate "/" . map unRef
+showKey = ("/" `T.append`) . T.intercalate "/" . map showRef
 
 showKeyS :: Key -> String
 showKeyS = T.unpack . showKey
-           
+
+showRefS :: Ref -> String
+showRefS = T.unpack . showRef
+
 ref :: String -> Ref
 ref = Ref . T.pack
 
@@ -73,7 +77,7 @@ class Storage s where
   -- enum [foo] = [bar,baz].
   -- 
   -- There is no well defined ordering for the results.
-  enum :: s -> Key -> IO [Key]
+  enum :: s -> Key -> IO [Ref]
 
 -- | Provides an enumerator for the contents of a given key.
 enumKey :: (MonadIO m, Storage s) => s -> Key -> Onum B.ByteString m ()
@@ -88,5 +92,5 @@ instance IsString Ref where
 
 instance S.Serialize Ref where
   
-  put = S.put . encodeUtf8 . unRef
+  put = S.put . encodeUtf8 . showRef
   get = fmap (Ref . decodeUtf8) S.get

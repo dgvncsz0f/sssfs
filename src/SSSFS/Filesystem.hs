@@ -7,6 +7,7 @@ module SSSFS.Filesystem
        , mkdir
        , creat
        , mknod
+       , dirContents
        ) where
 
 import Control.Applicative
@@ -95,13 +96,19 @@ creat s path = mknod s path File
 -- get overwritten with no mercy. Make sure you do this before calling
 -- mknod.
 mknod :: (Storage s) => s -> FilePath -> IType -> IO INode
-mknod s path ftype = do { p_inum <- stat s (dirname path)
-                        ; when (not $ isDirectory p_inum) (throw (NotADirectory $ dirname path))
+mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                         ; inum   <- mkINode Nothing ftype
                         ; l      <- putUnit s (inodeToINodeUnit inum) makeKey_
                         ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
                         ; putUnit_ s (inodeToDirEntUnit (basename path) inum) (makeKey1 (inode p_inum))
                         ; return inum
+                        }
+  where dir = dirname path
+
+-- | Returns the contents of a given directory
+dirContents :: (Storage s) => s -> FilePath -> IO [FilePath]
+dirContents s path = do { inum <- fmap (ensureDirectory path) (stat s path)
+                        ; fmap (map showRefS) (enum s (fromOID $ inode inum))
                         }
 
 -- | This operation is only defined for absolute paths. The behavior
@@ -111,10 +118,15 @@ stat s p = do { root <- follow s keyOne
               ; stat_ root (tail $ safeSplitPath p)
               }
   where stat_ inum []        = return inum
-        stat_ inum (x:xs) 
+        stat_ inum (x:xs)
           | isDirectory inum = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
           | otherwise        = throw (NotADirectory p)
-        
+
+ensureDirectory :: FilePath -> INode -> INode
+ensureDirectory path inum
+  | isDirectory inum = inum 
+  | otherwise        = throw $ NotADirectory path
+
 safeSplitPath :: FilePath -> [FilePath]
 safeSplitPath = map dropTrailingPathSeparator . splitPath
 

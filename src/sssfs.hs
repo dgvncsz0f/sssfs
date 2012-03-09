@@ -10,6 +10,9 @@ main = let s = D.new (L.new "/home/dsouza/tmp/sssfs")
              ; _ <- mkdir s "/foo"
              ; _ <- mkdir s "/foo/bar"
              ; _ <- mkdir s "/foo/bar/foobar"
-             ; _ <- creat s "/foo/bar/foobar/file"
-             ; stat s "/foo/bar/foobar" >>= print
+             ; _ <- creat s "/foo/bar/foobar/a"
+             ; _ <- creat s "/foo/bar/foobar/b"
+             ; _ <- creat s "/foo/bar/foobar/c"
+             ; _ <- creat s "/foo/bar/foobar/d"
+             ; dirContents s "/foo/bar/foobar" >>= mapM_ (\n -> stat s ("/foo/bar/foobar/" ++ n) >>= print)
              }
