@@ -27,9 +27,10 @@
 
 module SSSFS.Filesystem.Directory
        ( mkdir
-       , dirContents
+       , readDir
        ) where
 
+import System.FilePath
 import SSSFS.Storage
 import SSSFS.Filesystem.Core
 import SSSFS.Filesystem.Types
@@ -38,7 +39,11 @@ mkdir :: (Storage s) => s -> FilePath -> IO INode
 mkdir s path = mknod s path Directory
 
 -- | Returns the contents of a given directory
-dirContents :: (Storage s) => s -> FilePath -> IO [FilePath]
-dirContents s path = do { inum <- fmap (ensureDirectory path) (stat s path)
-                        ; fmap (map showRefS) (enum s (fromOID $ inode inum))
-                        }
+readDir :: (Storage s) => s -> FilePath -> IO [(FilePath, INode)]
+readDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)
+                    ; enum s (fromOID $ inode inum) >>= mapM (statDEnt . showRefS)
+                    }
+  where statDEnt dent = do { inum <- stat s dpath
+                           ; return (dent, inum)
+                           }
+          where dpath = path </> dent

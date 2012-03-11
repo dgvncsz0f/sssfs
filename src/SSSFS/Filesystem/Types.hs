@@ -190,7 +190,7 @@ eulav = S.decode
 eulavM :: (S.Serialize a, Monad m) => B.ByteString -> m a
 eulavM raw = case (eulav raw)
              of Left msg
-                  -> throw (ParseExcept msg)
+                  -> throw (DataCorruptionExcept msg)
                 Right u
                   -> return u
 
@@ -252,7 +252,7 @@ enumINode s = enumBlocks s . blocks
 ensureDirectory :: FilePath -> INode -> INode
 ensureDirectory path inum
   | isDirectory inum = inum 
-  | otherwise        = throw $ NotADirectory path
+  | otherwise        = throw $ NotADir path
 
 instance S.Serialize IType where
   put File      = S.putWord16le 0

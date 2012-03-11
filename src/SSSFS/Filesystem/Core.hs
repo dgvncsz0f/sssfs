@@ -70,7 +70,7 @@ follow s l = getUnit s l >>= followUM
         followUM u = do { mv <- followU u
                         ; case mv 
                           of Nothing
-                               -> throw (ParseExcept "follow failed")
+                               -> throw (DataCorruptionExcept "SSSFS.Filesystem.Core.follow")
                              Just v
                                -> return v
                         }
@@ -110,5 +110,5 @@ stat s p = do { root <- follow s keyOne
   where stat_ inum []        = return inum
         stat_ inum (x:xs)
           | isDirectory inum = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
-          | otherwise        = throw (NotADirectory p)
+          | otherwise        = throw (NotADir p)
 

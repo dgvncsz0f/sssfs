@@ -35,11 +35,15 @@ module SSSFS.Storage.Local
        ( new
        ) where
 
+import           Control.Exception as C
 import qualified Data.ByteString as B
 import qualified Data.Text as T
+import           Data.List (isPrefixOf)
 import           System.Directory
 import           System.FilePath
+import           System.IO.Error
 import           System.IO
+import           SSSFS.Except
 import           SSSFS.Storage
 
 newtype LocalStorage = LocalStorage FilePath
@@ -54,8 +58,7 @@ new = LocalStorage
 -- partition is atomic. You better be using a local filesystem.
 atomicWrite :: FilePath -> B.ByteString -> IO ()
 atomicWrite dst contents = let dir = takeDirectory dst
-                           in do { createDirectoryIfMissing True dir
-                                 ; (tmpF, tmpH) <- openBinaryTempFile dir "x-write.XXX"
+                           in do { (tmpF, tmpH) <- openBinaryTempFile dir "x-write.XXX"
                                  ; B.hPut tmpH contents
                                  ; hClose tmpH
                                  ; renameFile tmpF dst
@@ -91,9 +94,14 @@ chroot_ root l = chroot root l encodePath
 
 instance Storage LocalStorage where
   
-  put (LocalStorage root) k v = atomicWrite (chroot_ root k) v
+  put (LocalStorage root) k v = do { createDirectoryIfMissing True (chroot root k encodePathDir)
+                                   ; atomicWrite (chroot_ root k) v
+                                   }
   
-  get (LocalStorage root) k = readContent (chroot_ root k)
+  get (LocalStorage root) k = C.catch (readContent (chroot_ root k))
+                                      (\e -> if (isDoesNotExistError e)
+                                             then (throw $ NotFound (showKeyS k))
+                                             else ioError e)
   
   del (LocalStorage root) k = removeFile (chroot_ root k)
   
@@ -101,5 +109,5 @@ instance Storage LocalStorage where
   
   enum (LocalStorage root) k = let path       = chroot root k encodePathDir
                                    decode     = map (ref . decodePath)
-                                   filterList = filter (`notElem` [".",".."])
+                                   filterList = filter ("f" `isPrefixOf`)
                                in fmap (decode . filterList) (getDirectoryContents path)

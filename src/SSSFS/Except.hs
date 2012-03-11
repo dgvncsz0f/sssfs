@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable    #-}
+{-# LANGUAGE DeriveDataTypeable        #-}
+{-# LANGUAGE ExistentialQuantification #-}
 
 -- Copyright (c) 2012, Diego Souza
 -- All rights reserved.
@@ -34,18 +35,33 @@ import           Data.Typeable
 import           Control.Exception
 
 -- | The mother of all exceptions
-data CFSExcept = CFSExcept 
-               deriving (Show, Typeable)
+data CFSExcept = forall e. Exception e => CFSExcept e
+               deriving (Typeable)
 
-data SysExcept = SysExcept String
-               | ParseExcept String
-               | ObjectNotFound String
+data SysExcept = DataCorruptionExcept String
                deriving (Show, Typeable)
 
 data IOExcept = NotFound String
-              | NotADirectory String
+              | NotADir String
                deriving (Show, Typeable)
 
+cfsExceptToException :: Exception e => e -> SomeException
+cfsExceptToException = toException . CFSExcept
+
+cfsExceptFromException :: Exception e => SomeException -> Maybe e
+cfsExceptFromException x = do { CFSExcept e <- fromException x
+                              ; cast e
+                              }
+
+instance Show CFSExcept where
+  show (CFSExcept e) = show e
+
 instance Exception CFSExcept
-instance Exception SysExcept
-instance Exception IOExcept
+
+instance Exception SysExcept where
+  toException   = cfsExceptToException
+  fromException = cfsExceptFromException
+  
+instance Exception IOExcept where
+  toException   = cfsExceptToException
+  fromException = cfsExceptFromException

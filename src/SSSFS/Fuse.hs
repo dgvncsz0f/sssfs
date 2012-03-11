@@ -1,3 +1,5 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 -- Copyright (c) 2012, Diego Souza
 -- All rights reserved.
 -- 
@@ -24,4 +26,111 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+module SSSFS.Fuse where
 
+import Control.Monad
+import Control.Exception
+import Data.Bits
+import Foreign.C.Error
+import System.Fuse as F
+import System.Posix.Types
+import System.Posix.Files
+import SSSFS.Except
+import SSSFS.Storage as S
+import SSSFS.Filesystem.Types as T
+import SSSFS.Filesystem.Core
+import SSSFS.Filesystem.Files
+import SSSFS.Filesystem.Directory
+
+itypeToEntryType :: IType -> EntryType
+itypeToEntryType File        = RegularFile
+itypeToEntryType T.Directory = F.Directory
+
+inodeToFileStat :: INode -> FileStat
+inodeToFileStat inum = FileStat { statEntryType        = itypeToEntryType (itype inum)
+                                , statFileMode         = fmode
+                                , statLinkCount        = 1
+                                , statFileOwner        = 1000
+                                , statFileGroup        = 1000
+                                , statSpecialDeviceID  = 0
+                                , statFileSize         = fromInteger (size inum)
+                                , statBlocks           = 0
+                                , statAccessTime       = fromIntegral (fst $ atime inum)
+                                , statModificationTime = fromIntegral (fst $ mtime inum)
+                                , statStatusChangeTime = fromIntegral (fst $ ctime inum)
+                                }
+  where fmode = case (itype inum)
+                of File 
+                     -> ownerReadMode .|. ownerWriteMode
+                   T.Directory 
+                     -> ownerReadMode .|. ownerWriteMode .|. ownerExecuteMode
+
+install :: IO a -> (Errno -> IO a) -> IO a
+install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
+                          , Handler (\(e :: SysExcept)     -> handlerB e)
+                          , Handler (\(e :: SomeException) -> handlerB e)
+                          ]
+  where handlerA (NotFound _) = g eNOENT
+        handlerA (NotADir _)  = g eNOTDIR
+        
+        handlerB e = g eFAULT
+
+exToEither :: IO a -> IO (Either Errno a)
+exToEither f = install (fmap Right f) (return . Left)
+
+exToErrno :: IO () -> IO Errno
+exToErrno f = install (f >> return eOK) (return)
+
+fsMknod :: (Storage s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
+fsMknod s path RegularFile _ _ = exToErrno f
+  where f = creat s path >> return ()
+
+fsMkdir :: (Storage s) => s -> FilePath -> FileMode -> IO Errno
+fsMkdir s path _ = exToErrno f
+  where f = mkdir s path >> return ()
+
+fsReadDir :: (Storage s) => s -> FilePath -> IO (Either Errno [(FilePath, FileStat)])
+fsReadDir s path = exToEither f
+  where f = fmap (map (\(p, i) -> (p, inodeToFileStat i))) (readDir s path)
+
+fsStat :: (Storage s) => s -> FilePath -> IO (Either Errno FileStat)
+fsStat s path = exToEither f
+  where f = fmap inodeToFileStat (stat s path)
+
+fsInit :: (Storage s) => s -> IO ()
+fsInit s = do { oldfs <- S.head s keyOne 
+              ; when (not oldfs) (mkfs s)
+              }
+
+fuseOps :: (Storage s) => s -> FuseOperations ()
+fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
+                            , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
+                            , fuseCreateDevice         = fsMknod s
+                            , fuseCreateDirectory      = fsMkdir s
+                            , fuseReadDirectory        = fsReadDir s
+                            , fuseRemoveLink           = \_ -> return eFAULT
+                            , fuseRemoveDirectory      = \_ -> return eFAULT
+                            , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
+                            , fuseRename               = \_ _ -> return eFAULT
+                            , fuseCreateLink           = \_ _ -> return eFAULT
+                            , fuseSetFileMode          = \_ _ -> return eFAULT
+                            , fuseSetOwnerAndGroup     = \_ _ _ -> return eFAULT
+                            , fuseSetFileSize          = \_ _ -> return (eFAULT)
+                            , fuseSetFileTimes         = \_ _ _ -> return (eFAULT)
+                            , fuseOpen                 = \_ _ _ -> return (Left eFAULT)
+                            , fuseRead                 = \_ _ _ _ -> return (Left eFAULT)
+                            , fuseWrite                = \_ _ _ _ -> return (Left eFAULT)
+                            , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
+                            , fuseFlush                = \_ _ -> return eOK
+                            , fuseRelease              = \_ _ -> return ()
+                            , fuseSynchronizeFile      = \_ _ -> return eOK
+                            , fuseOpenDirectory        = \_ -> return eOK
+                            , fuseReleaseDirectory     = \_ -> return eOK
+                            , fuseSynchronizeDirectory = \_ _ -> return eOK
+                            , fuseAccess               = \_ _ -> return eOK
+                            , fuseInit                 = fsInit s
+                            , fuseDestroy              = return ()
+                            }
+
+main :: (Storage s) => s -> IO ()
+main s = fuseMain (fuseOps s) defaultExceptionHandler
