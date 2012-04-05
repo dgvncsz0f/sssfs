@@ -29,6 +29,7 @@ module SSSFS.Filesystem.Core
        ( mkfs
        , stat
        , mknod
+       , unlinkNod
        ) where
 
 import Control.Exception
@@ -57,6 +58,10 @@ putUnit s u f = let k = f $ fromStorageUnit u
 putUnit_ :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
 putUnit_ s u f = let k = f $ fromStorageUnit u
                  in put s k (value u)
+
+delUnit :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
+delUnit s u f = let k = f $ fromStorageUnit u
+                in del s k
 
 getUnit :: (Storage s) => s -> Key -> IO StorageUnit
 getUnit s l = get s l >>= eulavM
@@ -99,6 +104,16 @@ mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                         ; putUnit_ s (inodeToDirEntUnit (basename path) inum) (makeKey1 (inode p_inum))
                         ; return inum
                         }
+  where dir = dirname path
+
+-- | Removes an entry from a given directory. It does not perform any
+-- checkings so you better be sure you want to delete this entry. In
+-- general this should be the backend of functions suchs as `rmdir'
+-- and `unlink'.
+unlinkNod :: (Storage s) => s -> FilePath -> IO ()
+unlinkNod s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
+                      ; del s (fromLinkName (inode p_inum) (basename path))
+                      }
   where dir = dirname path
 
 -- | This operation is only defined for absolute paths. The behavior

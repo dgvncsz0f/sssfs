@@ -93,6 +93,10 @@ fsReadDir :: (Storage s) => s -> FilePath -> IO (Either Errno [(FilePath, FileSt
 fsReadDir s path = exToEither f
   where f = fmap (map (\(p, i) -> (p, inodeToFileStat i))) (readDir s path)
 
+fsRmdir :: (Storage s) => s -> FilePath -> IO Errno
+fsRmdir s path = exToErrno f
+  where f = rmdir s path
+
 fsStat :: (Storage s) => s -> FilePath -> IO (Either Errno FileStat)
 fsStat s path = exToEither f
   where f = fmap inodeToFileStat (stat s path)
@@ -109,7 +113,7 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseCreateDirectory      = fsMkdir s
                             , fuseReadDirectory        = fsReadDir s
                             , fuseRemoveLink           = \_ -> return eFAULT
-                            , fuseRemoveDirectory      = \_ -> return eFAULT
+                            , fuseRemoveDirectory      = fsRmdir s
                             , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
                             , fuseRename               = \_ _ -> return eFAULT
                             , fuseCreateLink           = \_ _ -> return eFAULT

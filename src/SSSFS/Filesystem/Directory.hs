@@ -27,6 +27,7 @@
 
 module SSSFS.Filesystem.Directory
        ( mkdir
+       , rmdir
        , readDir
        ) where
 
@@ -37,6 +38,9 @@ import SSSFS.Filesystem.Types
 
 mkdir :: (Storage s) => s -> FilePath -> IO INode
 mkdir s path = mknod s path Directory
+
+rmdir :: (Storage s) => s -> FilePath -> IO ()
+rmdir s path = unlinkNod s path
 
 -- | Returns the contents of a given directory
 readDir :: (Storage s) => s -> FilePath -> IO [(FilePath, INode)]
