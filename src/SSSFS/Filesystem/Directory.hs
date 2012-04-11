@@ -31,22 +31,31 @@ module SSSFS.Filesystem.Directory
        , readDir
        ) where
 
+import Control.Exception
 import System.FilePath
 import SSSFS.Storage
+import SSSFS.Except
 import SSSFS.Filesystem.Core
 import SSSFS.Filesystem.Types
 
-mkdir :: (Storage s) => s -> FilePath -> IO INode
+mkdir :: (StorageHashLike s) => s -> FilePath -> IO INode
 mkdir s path = mknod s path Directory
 
-rmdir :: (Storage s) => s -> FilePath -> IO ()
-rmdir s path = unlinkNod s path
+rmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
+rmdir s path = do { empty <- fmap not (enumDir s path)
+                  ; if (empty)
+                    then unlinkNod s path
+                    else throw (NotEmpty path)
+                  }
+
+enumDir :: (StorageContext s r) => s -> FilePath -> IO r
+enumDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)
+                    ; enum s (fromOID $ inode inum)
+                    }
 
 -- | Returns the contents of a given directory
-readDir :: (Storage s) => s -> FilePath -> IO [(FilePath, INode)]
-readDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)
-                    ; enum s (fromOID $ inode inum) >>= mapM (statDEnt . showRefS)
-                    }
+readDir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO [(FilePath, INode)]
+readDir s path = enumDir s path >>= mapM (statDEnt . showRefS)
   where statDEnt dent = do { inum <- stat s dpath
                            ; return (dent, inum)
                            }

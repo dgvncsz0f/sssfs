@@ -72,8 +72,9 @@ install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
                           ]
   where handlerA (NotFound _) = g eNOENT
         handlerA (NotADir _)  = g eNOTDIR
+        handlerA (NotEmpty _) = g eNOTEMPTY
         
-        handlerB e = g eFAULT
+        handlerB _ = g eFAULT
 
 exToEither :: IO a -> IO (Either Errno a)
 exToEither f = install (fmap Right f) (return . Left)
@@ -81,32 +82,32 @@ exToEither f = install (fmap Right f) (return . Left)
 exToErrno :: IO () -> IO Errno
 exToErrno f = install (f >> return eOK) (return)
 
-fsMknod :: (Storage s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
+fsMknod :: (StorageHashLike s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 fsMknod s path RegularFile _ _ = exToErrno f
   where f = creat s path >> return ()
 
-fsMkdir :: (Storage s) => s -> FilePath -> FileMode -> IO Errno
+fsMkdir :: (StorageHashLike s) => s -> FilePath -> FileMode -> IO Errno
 fsMkdir s path _ = exToErrno f
   where f = mkdir s path >> return ()
 
-fsReadDir :: (Storage s) => s -> FilePath -> IO (Either Errno [(FilePath, FileStat)])
+fsReadDir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO (Either Errno [(FilePath, FileStat)])
 fsReadDir s path = exToEither f
   where f = fmap (map (\(p, i) -> (p, inodeToFileStat i))) (readDir s path)
 
-fsRmdir :: (Storage s) => s -> FilePath -> IO Errno
+fsRmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO Errno
 fsRmdir s path = exToErrno f
   where f = rmdir s path
 
-fsStat :: (Storage s) => s -> FilePath -> IO (Either Errno FileStat)
+fsStat :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno FileStat)
 fsStat s path = exToEither f
   where f = fmap inodeToFileStat (stat s path)
 
-fsInit :: (Storage s) => s -> IO ()
+fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
               ; when (not oldfs) (mkfs s)
               }
 
-fuseOps :: (Storage s) => s -> FuseOperations ()
+fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations ()
 fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
                             , fuseCreateDevice         = fsMknod s
@@ -136,5 +137,5 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseDestroy              = return ()
                             }
 
-main :: (Storage s) => s -> IO ()
+main :: (StorageHashLike s, StorageEnumLike s) => s -> IO ()
 main s = fuseMain (fuseOps s) defaultExceptionHandler
