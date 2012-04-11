@@ -92,7 +92,7 @@ chroot root l f
 chroot_ :: FilePath -> Key -> FilePath
 chroot_ root l = chroot root l encodePath
 
-instance Storage LocalStorage where
+instance StorageHashLike LocalStorage where
   
   put (LocalStorage root) k v = do { createDirectoryIfMissing True (chroot root k encodePathDir)
                                    ; atomicWrite (chroot_ root k) v
@@ -107,7 +107,9 @@ instance Storage LocalStorage where
   
   head (LocalStorage root) k = doesFileExist (chroot_ root k)
   
-  enum (LocalStorage root) k = let path       = chroot root k encodePathDir
-                                   decode     = map (ref . decodePath)
-                                   filterList = filter ("f" `isPrefixOf`)
-                               in fmap (decode . filterList) (getDirectoryContents path)
+instance StorageEnumLike LocalStorage where
+  
+  enumKeys (LocalStorage root) k = let path       = chroot root k encodePathDir
+                                       decode     = map (ref . decodePath)
+                                       filterList = filter ("f" `isPrefixOf`)
+                                   in fmap (decode . filterList) (getDirectoryContents path)

@@ -51,22 +51,18 @@ makeKey_ = makeKey Nothing
 makeKey1 :: OID -> MakeKey
 makeKey1 = makeKey . Just
 
-putUnit :: (Storage s) => s -> StorageUnit -> MakeKey -> IO Key
+putUnit :: (StorageHashLike s) => s -> StorageUnit -> MakeKey -> IO Key
 putUnit s u f = let k = f $ fromStorageUnit u
                 in put s k (value u) >> return k
 
-putUnit_ :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
+putUnit_ :: (StorageHashLike s) => s -> StorageUnit -> MakeKey -> IO ()
 putUnit_ s u f = let k = f $ fromStorageUnit u
                  in put s k (value u)
 
-delUnit :: (Storage s) => s -> StorageUnit -> MakeKey -> IO ()
-delUnit s u f = let k = f $ fromStorageUnit u
-                in del s k
-
-getUnit :: (Storage s) => s -> Key -> IO StorageUnit
+getUnit :: (StorageHashLike s) => s -> Key -> IO StorageUnit
 getUnit s l = get s l >>= eulavM
 
-follow :: (Storage s) => s -> Key -> IO INode
+follow :: (StorageHashLike s) => s -> Key -> IO INode
 follow s l = getUnit s l >>= followUM
   where followU (INodePtrUnit _ l2) = fmap inodeUnitToINode (getUnit s l2)
         followU (DirEntUnit _ o)    = getUnit s (fromOID o) >>= followU
@@ -84,7 +80,7 @@ follow s l = getUnit s l >>= followUM
 -- creates a new inode with no contents and changes the root inode
 -- ptr, which will point to the newly created inode. Therefore old
 -- data will still be preserved but from now on is unreachable.
-mkfs :: (Storage s) => s -> IO ()
+mkfs :: (StorageHashLike s) => s -> IO ()
 mkfs s = do { inum <- mkINode (Just oidOne) Directory
             ; l    <- putUnit s (inodeToINodeUnit inum) makeKey_
             ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
@@ -96,7 +92,7 @@ mkfs s = do { inum <- mkINode (Just oidOne) Directory
 -- This function does not check if there is a link already. It will
 -- get overwritten with no mercy. Make sure you do this before calling
 -- mknod.
-mknod :: (Storage s) => s -> FilePath -> IType -> IO INode
+mknod :: (StorageHashLike s) => s -> FilePath -> IType -> IO INode
 mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                         ; inum   <- mkINode Nothing ftype
                         ; l      <- putUnit s (inodeToINodeUnit inum) makeKey_
@@ -110,7 +106,7 @@ mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
 -- checkings so you better be sure you want to delete this entry. In
 -- general this should be the backend of functions suchs as `rmdir'
 -- and `unlink'.
-unlinkNod :: (Storage s) => s -> FilePath -> IO ()
+unlinkNod :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
 unlinkNod s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                       ; del s (fromLinkName (inode p_inum) (basename path))
                       }
@@ -118,7 +114,7 @@ unlinkNod s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
 
 -- | This operation is only defined for absolute paths. The behavior
 -- is undefined if you provide a relative path.
-stat :: (Storage s) => s -> FilePath -> IO INode
+stat :: (StorageHashLike s) => s -> FilePath -> IO INode
 stat s p = do { root <- follow s keyOne
               ; stat_ root (tail $ safeSplitPath p)
               }

@@ -241,12 +241,12 @@ inodeUnitToINode _               = Nothing
 inodeToINodePtrUnit :: INode -> Key -> StorageUnit
 inodeToINodePtrUnit i l = INodePtrUnit (inode i) l
 
-enumBlocks :: (MonadIO m, Storage s) => s -> [DataBlock] -> Onum B.ByteString m ()
+enumBlocks :: (MonadIO m, StorageHashLike s) => s -> [DataBlock] -> Onum B.ByteString m ()
 enumBlocks _ []     = enumPure B.empty
 enumBlocks s [b]    = enumKey s (addr b)
 enumBlocks s (b:bs) = enumKey s (addr b) `lcat` (enumBlocks s bs)
 
-enumINode :: (MonadIO m, Storage s) => s -> INode -> Onum B.ByteString m ()
+enumINode :: (MonadIO m, StorageHashLike s) => s -> INode -> Onum B.ByteString m ()
 enumINode s = enumBlocks s . blocks
 
 ensureDirectory :: FilePath -> INode -> INode

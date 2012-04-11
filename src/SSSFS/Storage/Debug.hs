@@ -40,27 +40,53 @@ new = DebugStorage
 debug :: String -> IO ()
 debug m = putStrLn ("[debug] " ++ m)
 
-instance (Storage s) => Storage (DebugStorage s) where
+instance (StorageHashLike s) => StorageHashLike (DebugStorage s) where
   
-  put (DebugStorage s) k v = do { debug ("put " ++ showKeyS k ++ " - " ++ show (B.length v) ++ " bytes")
+  put (DebugStorage s) k v = do { debug ("put "
+                                         ++ showKeyS k
+                                         ++ " - "
+                                         ++ show (B.length v)
+                                         ++ " bytes")
                                 ; put s k v
                                 }
   
   get (DebugStorage s) k = do { v <- get s k
-                              ; debug ("get " ++ showKeyS k ++ " - " ++ show (B.length v) ++ " bytes")
+                              ; debug ("get "
+                                       ++ showKeyS k
+                                       ++ " - "
+                                       ++ show (B.length v)
+                                       ++ " bytes")
                               ; return v
                               }
   
-  del (DebugStorage s) k = do { debug ("del " ++ showKeyS k)
+  del (DebugStorage s) k = do { debug ("del "
+                                       ++ showKeyS k)
                               ; del s k
                               }
   
   head (DebugStorage s) k = do { v <- S.head s k
-                               ; debug ("head " ++ showKeyS k ++ " - " ++ show v)
+                               ; debug ("head "
+                                        ++ showKeyS k
+                                        ++ " - "
+                                        ++ show v)
                                ; return v
                                }
 
-  enum (DebugStorage s) k = do { vs <- enum s k
-                               ; debug ("enum " ++ showKeyS k ++ " - " ++ show (length vs) ++ " elements")
-                               ; return vs
-                               }
+instance (StorageEnumLike s) => StorageEnumLike (DebugStorage s) where
+  
+  enumKeys (DebugStorage s) k = do { vs <- enumKeys s k
+                                   ; debug ("enumKeys " 
+                                            ++ showKeyS k 
+                                            ++ " - " 
+                                            ++ show (length vs) ++ " elements")
+                                   ; return vs
+                                   }
+  
+  enumTest (DebugStorage s) k = do { v <- enumTest s k
+                                   ; debug ("enumTest "
+                                            ++ showKeyS k
+                                            ++ " - "
+                                            ++ show v)
+                                   ; return v
+                                   }
+  

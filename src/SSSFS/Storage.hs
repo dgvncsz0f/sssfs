@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances     #-}
 
 -- Copyright (c) 2012, Diego Souza
 -- All rights reserved.
@@ -32,7 +34,9 @@ module SSSFS.Storage
          Ref(..)
        , Key
        , Payload
-       , Storage(..)
+       , StorageHashLike(..)
+       , StorageEnumLike(..)
+       , StorageContext(..)
          -- | Ref/Key Functions
        , ref
        , fromRef
@@ -81,9 +85,8 @@ fromRef = (:[])
 
 fromStr :: String -> Key
 fromStr = (:[]) . ref
-           
--- | The primitives that every storage needs to supply.
-class Storage s where
+
+class StorageHashLike s where
   
   -- | Writes content and makes it available under a given location.
   put  :: s -> Key -> Payload -> IO ()
@@ -98,6 +101,7 @@ class Storage s where
   -- | Checks whether or a not a given resource is available.
   head :: s -> Key -> IO Bool
   
+class StorageEnumLike s where
   -- | Enumerates all locations that are proper prefixes of a given
   -- location. If you consider locations hierarchically, then a proper
   -- prefix will be the all of its proper children. For instance:
@@ -106,10 +110,17 @@ class Storage s where
   -- enum [foo] = [bar,baz].
   -- 
   -- There is no well defined ordering for the results.
-  enum :: s -> Key -> IO [Ref]
+  enumKeys :: s -> Key -> IO [Ref]
+  
+  enumTest :: s -> Key -> IO Bool
+  enumTest s k = fmap (not . null) (enumKeys s k)
+
+class (StorageHashLike s, StorageEnumLike s) => StorageContext s r where
+  
+  enum :: s -> Key -> IO r
 
 -- | Provides an enumerator for the contents of a given key.
-enumKey :: (MonadIO m, Storage s) => s -> Key -> Onum B.ByteString m ()
+enumKey :: (MonadIO m, StorageHashLike s) => s -> Key -> Onum B.ByteString m ()
 enumKey s l = mkInumC id noCtl (liftIO $ get s l)
 
 -- | Currently computes the sha256 of a given bytestring.
@@ -123,3 +134,12 @@ instance S.Serialize Ref where
   
   put = S.put . encodeUtf8 . showRef
   get = fmap (Ref . decodeUtf8) S.get
+
+instance (StorageHashLike s, StorageEnumLike s) => StorageContext s Bool where
+  
+  enum s k = enumTest s k
+
+instance (StorageHashLike s, StorageEnumLike s) => StorageContext s ([] Ref) where
+  
+  enum s k = enumKeys s k
+
