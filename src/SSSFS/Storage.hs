@@ -86,7 +86,6 @@ fromRef = (:[])
 fromStr :: String -> Key
 fromStr = (:[]) . ref
 
--- | The primitives that every storage needs to supply.
 class StorageHashLike s where
   
   -- | Writes content and makes it available under a given location.
@@ -143,14 +142,6 @@ instance (StorageHashLike s, StorageEnumLike s) => StorageContext s Bool where
   
   enum s k = enumTest s k
 
-instance (StorageHashLike s, StorageEnumLike s) => StorageContext s Int where
-  
-  enum s k = enumCount s k
-
 instance (StorageHashLike s, StorageEnumLike s) => StorageContext s ([] Ref) where
   
   enum s k = enumKeys s k
-
-instance (StorageHashLike s, StorageEnumLike s) => StorageContext s () where
-  
-  enum _ _ = return ()
