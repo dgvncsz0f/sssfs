@@ -44,6 +44,7 @@ data SysExcept = DataCorruptionExcept String
 data IOExcept = NotFound String
               | NotADir String
               | NotEmpty String
+              | IsDir String
                deriving (Show, Typeable)
 
 cfsExceptToException :: Exception e => e -> SomeException

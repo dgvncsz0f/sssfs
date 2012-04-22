@@ -39,6 +39,7 @@ module SSSFS.Filesystem.Types
          -- | INode functions
        , mkINode
        , ensureDirectory
+       , ensureFile
        , isFile
        , isDirectory
          -- | Metadata String Functions
@@ -253,6 +254,11 @@ ensureDirectory :: FilePath -> INode -> INode
 ensureDirectory path inum
   | isDirectory inum = inum 
   | otherwise        = throw $ NotADir path
+
+ensureFile :: FilePath -> INode -> INode
+ensureFile path inum
+  | isFile inum = inum 
+  | otherwise   = throw $ IsDir path
 
 instance S.Serialize IType where
   put File      = S.putWord16le 0

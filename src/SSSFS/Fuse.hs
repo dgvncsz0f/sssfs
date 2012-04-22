@@ -73,6 +73,7 @@ install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
   where handlerA (NotFound _) = g eNOENT
         handlerA (NotADir _)  = g eNOTDIR
         handlerA (NotEmpty _) = g eNOTEMPTY
+        handlerA (IsDir _)   = g eISDIR
         
         handlerB _ = g eFAULT
 
@@ -102,12 +103,16 @@ fsStat :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno FileStat)
 fsStat s path = exToEither f
   where f = fmap inodeToFileStat (stat s path)
 
+-- fsOpen :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno INode)
+fsOpen s path _ _ = exToEither f
+  where f = open s path
+
 fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
               ; when (not oldfs) (mkfs s)
               }
 
-fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations ()
+fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations INode
 fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
                             , fuseCreateDevice         = fsMknod s
@@ -118,11 +123,11 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
                             , fuseRename               = \_ _ -> return eFAULT
                             , fuseCreateLink           = \_ _ -> return eFAULT
-                            , fuseSetFileMode          = \_ _ -> return eFAULT
-                            , fuseSetOwnerAndGroup     = \_ _ _ -> return eFAULT
-                            , fuseSetFileSize          = \_ _ -> return (eFAULT)
-                            , fuseSetFileTimes         = \_ _ _ -> return (eFAULT)
-                            , fuseOpen                 = \_ _ _ -> return (Left eFAULT)
+                            , fuseSetFileMode          = \_ _ -> return eOK
+                            , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
+                            , fuseSetFileSize          = \_ _ -> return eOK
+                            , fuseSetFileTimes         = \_ _ _ -> return eOK
+                            , fuseOpen                 = fsOpen s
                             , fuseRead                 = \_ _ _ _ -> return (Left eFAULT)
                             , fuseWrite                = \_ _ _ _ -> return (Left eFAULT)
                             , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)

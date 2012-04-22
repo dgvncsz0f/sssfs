@@ -27,6 +27,7 @@
 
 module SSSFS.Filesystem.Files
        ( creat
+       , open
        ) where
 
 import SSSFS.Storage
@@ -36,3 +37,6 @@ import SSSFS.Filesystem.Core
 -- | Creates a new empty file
 creat :: (StorageHashLike s) => s -> FilePath -> IO INode
 creat s path = mknod s path File
+
+open :: (StorageHashLike s) => s -> FilePath -> IO INode
+open s path = fmap (ensureFile path) (stat s path)
