@@ -24,33 +24,9 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+module SSSFS.Misc where
 
-module SSSFS.Filesystem.Files
-       ( creat
-       , open
-       , fread
-       ) where
-
-import           SSSFS.Misc
-import           SSSFS.Storage
-import           SSSFS.Filesystem.Types
-import           SSSFS.Filesystem.Core
-import           Control.Monad
-import qualified Data.ByteString as B
-
--- | Creates a new empty file
-creat :: (StorageHashLike s) => s -> FilePath -> IO INode
-creat s path = mknod s path File
-
-open :: (StorageHashLike s) => s -> FilePath -> IO INode
-open s path = fmap (ensureFile path) (stat s path)
-
-fread :: (StorageHashLike s) => s -> INode -> Seek -> Size -> IO B.ByteString
-fread s inum ofset sz = let blkix    = fromIntegral ofset `div` (blksz inum)
-                            skip     = fromIntegral ofset `mod` (blksz inum)
-                            zeroB    = Direct keyZero
-                            Just ptr = (at (blocks inum) blkix) `mplus` (Just zeroB)
-                        in do { raw <- get s (addr ptr)
-                              ; return (B.take sz $ B.drop skip raw)
-                              }
-
+at :: [a] -> Int -> Maybe a
+at xs ix
+  | ix>0 && ix < length xs = Just (xs !! ix)
+  | otherwise              = Nothing

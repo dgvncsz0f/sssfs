@@ -28,19 +28,20 @@
 
 module SSSFS.Fuse where
 
-import Control.Monad
-import Control.Exception
-import Data.Bits
-import Foreign.C.Error
-import System.Fuse as F
-import System.Posix.Types
-import System.Posix.Files
-import SSSFS.Except
-import SSSFS.Storage as S
-import SSSFS.Filesystem.Types as T
-import SSSFS.Filesystem.Core
-import SSSFS.Filesystem.Files
-import SSSFS.Filesystem.Directory
+import           Control.Monad
+import           Control.Exception
+import           Data.Bits
+import           Foreign.C.Error
+import           System.Fuse as F
+import           System.Posix.Types
+import           System.Posix.Files
+import qualified Data.ByteString as B
+import           SSSFS.Except
+import           SSSFS.Storage as S
+import           SSSFS.Filesystem.Types as T
+import           SSSFS.Filesystem.Core
+import           SSSFS.Filesystem.Files
+import           SSSFS.Filesystem.Directory
 
 itypeToEntryType :: IType -> EntryType
 itypeToEntryType File        = RegularFile
@@ -112,6 +113,9 @@ fsInit s = do { oldfs <- S.head s keyOne
               ; when (not oldfs) (mkfs s)
               }
 
+fsRead :: (StorageHashLike s) => s -> FilePath -> INode -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
+fsRead s _ inum offset sz = fmap Right $ fread s inum (fromIntegral offset) (fromIntegral sz)
+
 fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations INode
 fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
@@ -128,7 +132,7 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseSetFileSize          = \_ _ -> return eOK
                             , fuseSetFileTimes         = \_ _ _ -> return eOK
                             , fuseOpen                 = fsOpen s
-                            , fuseRead                 = \_ _ _ _ -> return (Left eFAULT)
+                            , fuseRead                 = fsRead s
                             , fuseWrite                = \_ _ _ _ -> return (Left eFAULT)
                             , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
                             , fuseFlush                = \_ _ -> return eOK

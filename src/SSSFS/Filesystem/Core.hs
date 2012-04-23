@@ -84,6 +84,7 @@ mkfs :: (StorageHashLike s) => s -> IO ()
 mkfs s = do { inum <- mkINode (Just oidOne) Directory
             ; l    <- putUnit s (inodeToINodeUnit inum) makeKey_
             ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
+            ; putUnit_ s emptyBlock makeKey_
             }
 
 -- | Creates a new entry on a given directory. The dirname of this

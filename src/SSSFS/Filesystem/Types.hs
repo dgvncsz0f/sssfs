@@ -36,6 +36,8 @@ module SSSFS.Filesystem.Types
        , INode(..)
        , StorageUnit(..)
        , IType(..)
+       , Seek
+       , Size
          -- | INode functions
        , mkINode
        , ensureDirectory
@@ -54,9 +56,11 @@ module SSSFS.Filesystem.Types
        , newid
        , oidOne
        , keyOne
+       , keyZero
          -- | Date/Time Functions
        , now
          -- | StorageUnit Functions
+       , emptyBlock
        , fromOID
        , fromStorageUnit
        , fromLinkName
@@ -91,6 +95,10 @@ import           SSSFS.Storage
 type OID = B.ByteString
 
 type Timestamp = (Int,Int)
+
+type Seek = Integer
+
+type Size = Int
 
 -- | Arbirtrary information held as a key-value pair
 type Metadata = [(B.ByteString, B.ByteString)]
@@ -131,6 +139,13 @@ oidOne = B.pack [1]
 
 keyOne :: Key
 keyOne = fromOID oidOne
+
+emptyBlock :: StorageUnit
+emptyBlock = DataBlockUnit B.empty
+
+keyZero :: Key
+keyZero = v
+  where Left v = fromStorageUnit emptyBlock
 
 now :: IO Timestamp
 now = do { t <- getTime Realtime
