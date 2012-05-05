@@ -49,7 +49,7 @@ import           SSSFS.Storage
 newtype LocalStorage = LocalStorage FilePath
 
 maxSize :: Int
-maxSize = 64 * 1024
+maxSize = 8 * 1024 * 1024
 
 new :: FilePath -> LocalStorage
 new = LocalStorage

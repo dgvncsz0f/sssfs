@@ -36,6 +36,9 @@ module SSSFS.Filesystem.Types
        , INode(..)
        , StorageUnit(..)
        , IType(..)
+       , Block
+       , BlockSeek
+       , BlockIx
        , Seek
        , Size
          -- | INode functions
@@ -44,6 +47,9 @@ module SSSFS.Filesystem.Types
        , ensureFile
        , isFile
        , isDirectory
+       , getBlock
+       , putBlock
+       , truncateI
          -- | Metadata String Functions
        , encode
        , decode
@@ -84,6 +90,7 @@ import           Data.Maybe
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import qualified Data.Text as T
+import qualified Data.Map as M
 import           Data.Text.Encoding
 import           Data.IterIO
 import qualified Data.Serialize as S
@@ -94,18 +101,26 @@ import           SSSFS.Storage
 
 type OID = B.ByteString
 
+type Block = B.ByteString
+
 type Timestamp = (Int,Int)
 
 type Seek = Integer
 
+type BlockSeek = Int
+
 type Size = Int
+
+type BlockIx = Int
 
 -- | Arbirtrary information held as a key-value pair
 type Metadata = [(B.ByteString, B.ByteString)]
 
 -- | A data block is a pointer to a chunk of data.
 -- 
-data DataBlock = Direct { addr :: Key }
+data DataBlock = Direct { addr :: Key 
+                        , sz   :: Int
+                        }
                deriving (Eq,Show)
 
 data IType = File
@@ -114,15 +129,15 @@ data IType = File
 
 -- | The information about an object in the filesystem. This mimics
 -- the tradicional UNIX inode data structure.
-data INode = INode { inode  :: OID         -- ^ Unique id of this inode
-                   , itype  :: IType       -- ^ The type of this file (e.g. File, Directory)
-                   , atime  :: Timestamp   -- ^ Access time
-                   , ctime  :: Timestamp   -- ^ Creation time
-                   , mtime  :: Timestamp   -- ^ Modification time
-                   , meta   :: Metadata    -- ^ Arbitrary metadata information
-                   , blksz  :: Int         -- ^ Fixed size of each datablock
-                   , size   :: Integer     -- ^ Size of this file in bytes
-                   , blocks :: [DataBlock] -- ^ The actual file contents
+data INode = INode { inode  :: OID                 -- ^ Unique id of this inode
+                   , itype  :: IType               -- ^ The type of this file (e.g. File, Directory)
+                   , atime  :: Timestamp           -- ^ Access time
+                   , ctime  :: Timestamp           -- ^ Creation time
+                   , mtime  :: Timestamp           -- ^ Modification time
+                   , meta   :: Metadata            -- ^ Arbitrary metadata information
+                   , blksz  :: Int                 -- ^ Fixed size of each datablock
+                   , size   :: Integer             -- ^ Size of this file in bytes
+                   , blocks :: M.Map Int DataBlock -- ^ The actual file contents
                    }
            deriving (Eq,Show)
 
@@ -142,6 +157,23 @@ keyOne = fromOID oidOne
 
 emptyBlock :: StorageUnit
 emptyBlock = DataBlockUnit B.empty
+
+getBlock :: INode -> BlockIx -> Maybe DataBlock
+getBlock inum ix = M.lookup ix (blocks inum)
+
+putBlock :: INode -> BlockIx -> DataBlock -> INode
+putBlock inum ix blk
+  | sz blk == 0 = inum 
+  | otherwise   = updateSize $ inum { blocks = uBlocks }
+    where uBlocks = M.insert ix blk (blocks inum)
+        
+truncateI :: INode -> BlockIx -> INode
+truncateI inum newSz = updateSize $ inum { blocks = uBlocks }
+  where uBlocks = M.filterWithKey (\k _ -> k<newSz) (blocks inum)
+                                                
+updateSize :: INode -> INode
+updateSize inum = inum { size = M.fold (\a b -> szI a + b) 0 (blocks inum) }
+  where szI = fromIntegral . sz
 
 keyZero :: Key
 keyZero = v
@@ -221,7 +253,7 @@ mkINode moid ftype = do { time  <- now
                                          , meta   = []
                                          , size   = 0
                                          , blksz  = blockSize
-                                         , blocks = []
+                                         , blocks = M.empty
                                          }
                        }
 
@@ -230,13 +262,13 @@ inodeToDirEntUnit n i = DirEntUnit n (inode i)
 
 inodeToINodeUnit :: INode -> StorageUnit
 inodeToINodeUnit i = let core = [ (encode "inode", inode i)
-                                , (encode "itype", S.encode (itype i))
-                                , (encode "atime", S.encode (atime i))
-                                , (encode "ctime", S.encode (ctime i))
-                                , (encode "mtime", S.encode (mtime i))
-                                , (encode "blksz", S.encode (blksz i))
-                                , (encode "size", S.encode (size i))
-                                -- , (encode "blocks", S.encode [])
+                                , (encode "itype", value (itype i))
+                                , (encode "atime", value (atime i))
+                                , (encode "ctime", value (ctime i))
+                                , (encode "mtime", value (mtime i))
+                                , (encode "blksz", value (blksz i))
+                                , (encode "size", value (size i))
+                                , (encode "blocks", value (M.toList $ blocks i))
                                 ]
                          user = meta i
                      in INodeUnit core user
@@ -250,7 +282,7 @@ inodeUnitToINode (INodeUnit c u) = INode <$> (lookup "inode" core)
                                          <*> (Just u)
                                          <*> (lookup "blksz" core >>= eulavM)
                                          <*> (lookup "size" core >>= eulavM)
-                                         <*> (Just [])
+                                         <*> (lookup "blocks" core >>= fmap M.fromList . eulavM)
   where core = map (\(k,v) -> (decode k, v)) c
 inodeUnitToINode _               = Nothing
 
@@ -263,7 +295,7 @@ enumBlocks s [b]    = enumKey s (addr b)
 enumBlocks s (b:bs) = enumKey s (addr b) `lcat` (enumBlocks s bs)
 
 enumINode :: (MonadIO m, StorageHashLike s) => s -> INode -> Onum B.ByteString m ()
-enumINode s = enumBlocks s . blocks
+enumINode s = enumBlocks s . M.elems . blocks
 
 ensureDirectory :: FilePath -> INode -> INode
 ensureDirectory path inum
@@ -276,14 +308,23 @@ ensureFile path inum
   | otherwise   = throw $ IsDir path
 
 instance S.Serialize IType where
-  put File      = S.putWord16le 0
-  put Directory = S.putWord16le 1
+  put File      = S.putWord8 0
+  put Directory = S.putWord8 1
   
-  get = do { opcode <- S.getWord16le
+  get = do { opcode <- S.getWord8
            ; case opcode
              of 0 -> return File
                 1 -> return Directory
                 _ -> fail "unknow opcode"
+           }
+
+instance S.Serialize DataBlock where
+  put (Direct k s) = S.putWord8 0 >> S.put k >> S.put s
+  
+  get = do { opcode <- S.getWord8
+           ; case opcode
+             of 0 -> liftA2 Direct S.get S.get
+                _ -> fail "unknown opcode"
            }
 
 instance S.Serialize StorageUnit where
@@ -310,25 +351,9 @@ instance S.Serialize StorageUnit where
   get = 
     do { opcode <- S.getWord8
        ; case opcode 
-         of 0 -> getINodeUnit
-            1 -> getDataBlockUnit
-            2 -> getINodePtrUnit
-            3 -> getDirEntUnit
+         of 0 -> liftA2 INodeUnit S.get S.get
+            1 -> liftA DataBlockUnit S.get
+            2 -> liftA2 INodePtrUnit S.get S.get
+            3 -> liftA2 DirEntUnit S.get S.get
             _ -> fail "unknown opcode"
        }
-    where getINodeUnit = do { core <- S.get
-                            ; user <- S.get
-                            ; return (INodeUnit core user)
-                            }
-          
-          getDataBlockUnit = fmap DataBlockUnit S.get
-          
-          getINodePtrUnit = do { o <- S.get
-                               ; l <- S.get
-                               ; return (INodePtrUnit o l)
-                               }
-          
-          getDirEntUnit = do { n <- S.get
-                             ; o <- S.get
-                             ; return (DirEntUnit n o)
-                             }

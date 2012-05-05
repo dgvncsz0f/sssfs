@@ -26,31 +26,62 @@
 
 
 module SSSFS.Filesystem.Files
-       ( creat
+       ( FileHandle
+       , creat
        , open
        , fread
+       , fwrite
+       , fsync
+       , ftruncate
        ) where
 
-import           SSSFS.Misc
+import qualified Data.ByteString as B
 import           SSSFS.Storage
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Core
-import           Control.Monad
-import qualified Data.ByteString as B
+import           SSSFS.Filesystem.Blocks
+
+type FileHandle = INode
 
 -- | Creates a new empty file
-creat :: (StorageHashLike s) => s -> FilePath -> IO INode
-creat s path = mknod s path File
+creat :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
+creat s path = do { inum <- mknod s path File
+                  ; return inum
+                  }
 
-open :: (StorageHashLike s) => s -> FilePath -> IO INode
-open s path = fmap (ensureFile path) (stat s path)
+open :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
+open s path = do { inum <- fmap (ensureFile path) (stat s path)
+                 ; return inum
+                 }
 
-fread :: (StorageHashLike s) => s -> INode -> Seek -> Size -> IO B.ByteString
-fread s inum ofset sz = let blkix    = fromIntegral ofset `div` (blksz inum)
-                            skip     = fromIntegral ofset `mod` (blksz inum)
-                            zeroB    = Direct keyZero
-                            Just ptr = (at (blocks inum) blkix) `mplus` (Just zeroB)
-                        in do { raw <- get s (addr ptr)
-                              ; return (B.take sz $ B.drop skip raw)
-                              }
+ftruncate :: (StorageHashLike s) => s -> FileHandle -> Seek -> IO FileHandle
+ftruncate s fh offset = do { bLast <- fmap (truncateB seek) (load s fh blkIx)
+                           ; store s (truncateI fh blkIx) blkIx bLast
+                           }
+  where (blkIx, seek) = calc (blksz fh) offset
 
+fread :: (StorageHashLike s) => s -> FileHandle -> Seek -> Size -> IO Block
+fread s fh offset bufsz = fmap B.concat (freadChunks s fh offset bufsz)
+
+freadChunks :: (StorageHashLike s) => s -> FileHandle -> Seek -> Size -> IO [Block]
+freadChunks s fh offset bufsz = do { bHead <- fmap (slice bufsz seek) (load s fh blkIx)
+                                   ; bTail <- readTail (B.length bHead)
+                                   ; return (bHead : bTail)
+                                   }
+  where (blkIx, seek) = calc (blksz fh) offset
+
+        readTail 0      = return []
+        readTail bCount = freadChunks s fh (offset + (fromIntegral bCount)) (bufsz - bCount)
+
+fwrite :: (StorageHashLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
+fwrite s fh raw offset = do { nBlocks <- fmap chunks (load s fh blkIx)
+                            ; inum    <- stores s fh blkIx nBlocks
+                            ; return inum
+                            }
+  where (blkIx, seek) = calc (blksz fh) offset
+        
+        chunks oBlock = toChunks (writeB seek oBlock raw) (blksz fh)
+        
+
+fsync :: (StorageHashLike s) => s -> FileHandle -> IO ()
+fsync s fh = sync s fh

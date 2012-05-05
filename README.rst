@@ -40,12 +40,12 @@ stat structure, contains:
 * time of last status change;
 * user defined meta-data in the form of a list of 2-tuple;
 
-The /inode/ structure is stored as two objects in S3. The /inode/
-itself it just a pointer, which we will refer as /inode ptr/ from now
+The *inode* structure is stored as two objects in S3. The *inode*
+itself it just a pointer, which we will refer as *inode ptr* from now
 on. It contains the key of the object that actually contains the
 information. This second object is immutable, its key is the hash of
 its contents. As a matter effect the only object that is subject to
-modification is the /inode ptr/. Everything else is read only::
+modification is the *inode ptr*. Everything else is read only::
   
                               read only
                    +------------------------------+
@@ -62,10 +62,10 @@ modification is the /inode ptr/. Everything else is read only::
                             +----------------+
 
 The reason every object is immutable is that it simplifies the
-/copy-on-write/ implementation. Copy-on-write is desirable as it may
+*copy-on-write* implementation. Copy-on-write is desirable as it may
 reduce storage costs and some operations, like COPY, become very
 cheap/fast. On the other hand, DELETE operation may leave dangling
-blocks, blocks that no /inode ptr/ is referring to. These are hard to
+blocks, blocks that no *inode ptr* is referring to. These are hard to
 detect and reclaim as the current state of s3 one is able to see might
 not reflect the latest updates. In fact, this is an open issue and for
 now there is no good solution.
@@ -74,14 +74,14 @@ Directories
 -----------
 
 Directories are an interesting problem. If the directory contents are
-stored as /data blocks/, we may have race conditions and the current s3
+stored as *data blocks*, we may have race conditions and the current s3
 data model makes it really hard to implement a reasonable
 solution. There has been a couple of ideas, each one with its
 pros/cons. I'll try to explain the problems and the reason behind the
 decision.
 
 The first idea was to represent the directories using some data
-structure like a /BTree/ or a /Hash/. Conflicts would be solved using
+structure like a *BTree* or a *Hash*. Conflicts would be solved using
 a merge algorithm, and if the conflict couldn't be solved by the
 merging algorithm, say two concurrent updates on the same file, the
 latest transaction, i.e., the one with the most recent timestamp,
@@ -92,12 +92,12 @@ when an object will be available. Then we might miss the conflict,
 leaving the resolution for the s3 itself. Thus, great potential for
 huge data losses.
 
-The other ideas were all some variation of this and do not deserve to
-be mentioned.
-
 The second idea is to use s3 itself, using suffix keys, to store the
-directory contents. In this case the directory have no /data blocks/,
-instead, each name would be a suffix of the actual /inode ptr/ key.
+directory contents. In this case the directory have no *data blocks*,
+instead, each name would be a suffix of the actual *inode ptr* key.
+
+The other ideas were all some variation of these two and do not
+deserve to be mentioned.
 
 As a real example, consider the file `/foo/bar/foobar` the following
 objects in s3 should be created (hope this will clarify the directory
@@ -126,7 +126,7 @@ representation so far.
 
 Why not create a 1:1 relation to the path, say creating a resource
 `/foo/bar/foobar` directly in s3. Well, there are a couple of reasons
-one should not do this, the most obvious being /RENAME/ operations.
+one should not do this, the most obvious being *RENAME* operations.
 
 TODOS
 =====

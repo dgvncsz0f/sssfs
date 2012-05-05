@@ -33,3 +33,4 @@ import           SSSFS.Storage.Debug as D
 
 main :: IO ()
 main = F.main (D.new (L.new "/home/dsouza/tmp/sssfs"))
+-- main = F.main (L.new "/home/dsouza/tmp/sssfs")

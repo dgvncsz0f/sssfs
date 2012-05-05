@@ -30,13 +30,20 @@ module SSSFS.Filesystem.Core
        , stat
        , mknod
        , unlinkNod
+       , sync
+       , load
+       , store
+       , stores
        ) where
 
-import Control.Exception
-import SSSFS.Storage
-import SSSFS.Except
-import SSSFS.Filesystem.Types
-import SSSFS.Filesystem.Path
+import qualified Data.ByteString as B
+import           Data.Maybe
+import           Control.Monad (mplus, foldM)
+import           Control.Exception
+import           SSSFS.Storage
+import           SSSFS.Except
+import           SSSFS.Filesystem.Types
+import           SSSFS.Filesystem.Path
 
 type MakeKey = Either Key (OID -> Key) -> Key
 
@@ -102,6 +109,27 @@ mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                         ; return inum
                         }
   where dir = dirname path
+
+sync :: (StorageHashLike s) => s -> INode -> IO ()
+sync s inum = do { l <- putUnit s (inodeToINodeUnit inum) makeKey_
+                 ; putUnit_ s (inodeToINodePtrUnit inum l) makeKey_
+                 }
+
+load :: (StorageHashLike s) => s -> INode -> BlockIx -> IO Block
+load s inum ix = fmap unpack (getUnit s (addr blkPtr))
+  where blkPtr = fromJust $ getBlock inum ix `mplus` Just (Direct keyZero 0)
+        
+        unpack (DataBlockUnit bytes) = bytes
+        unpack _                     = throw (DataCorruptionExcept "SSSFS.Filesystem.Core.load")
+
+store :: (StorageHashLike s) => s -> INode -> BlockIx -> Block -> IO INode
+store s inum ix raw = do { key <- putUnit s (DataBlockUnit raw) makeKey_
+                         ; return (putBlock inum ix (Direct key (B.length raw)))
+                         }
+
+stores :: (StorageHashLike s) => s -> INode -> BlockIx -> [Block] -> IO INode
+stores s inum0 ix0 blks = fmap fst (foldM f (inum0, ix0) blks)
+  where f (inum,ix) blk = fmap (\a -> (a,ix+1)) (store s inum ix blk)
 
 -- | Removes an entry from a given directory. It does not perform any
 -- checkings so you better be sure you want to delete this entry. In

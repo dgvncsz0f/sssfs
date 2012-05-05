@@ -31,17 +31,21 @@ module SSSFS.Fuse where
 import           Control.Monad
 import           Control.Exception
 import           Data.Bits
+import           Data.IORef
 import           Foreign.C.Error
 import           System.Fuse as F
 import           System.Posix.Types
 import           System.Posix.Files
 import qualified Data.ByteString as B
 import           SSSFS.Except
+import           SSSFS.Fuse.Debug
 import           SSSFS.Storage as S
 import           SSSFS.Filesystem.Types as T
 import           SSSFS.Filesystem.Core
 import           SSSFS.Filesystem.Files
 import           SSSFS.Filesystem.Directory
+
+type FHandle = IORef FileHandle
 
 itypeToEntryType :: IType -> EntryType
 itypeToEntryType File        = RegularFile
@@ -85,8 +89,8 @@ exToErrno :: IO () -> IO Errno
 exToErrno f = install (f >> return eOK) (return)
 
 fsMknod :: (StorageHashLike s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
-fsMknod s path RegularFile _ _ = exToErrno f
-  where f = creat s path >> return ()
+fsMknod s path RegularFile _ _ = exToErrno (creat s path >> return ())
+fsMknod _ _ _ _ _              = return eFAULT
 
 fsMkdir :: (StorageHashLike s) => s -> FilePath -> FileMode -> IO Errno
 fsMkdir s path _ = exToErrno f
@@ -104,19 +108,46 @@ fsStat :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno FileStat)
 fsStat s path = exToEither f
   where f = fmap inodeToFileStat (stat s path)
 
--- fsOpen :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno INode)
+fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
 fsOpen s path _ _ = exToEither f
-  where f = open s path
+  where f = do { fh <- open s path
+               ; newIORef fh
+               }
 
 fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
               ; when (not oldfs) (mkfs s)
               }
 
-fsRead :: (StorageHashLike s) => s -> FilePath -> INode -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
-fsRead s _ inum offset sz = fmap Right $ fread s inum (fromIntegral offset) (fromIntegral sz)
+fsRead :: (StorageHashLike s) => s -> FilePath -> FHandle -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
+fsRead s _ rfh pSize pOffset = readIORef rfh >>= sysread
+  where offset = fromIntegral pOffset
+        
+        bufsz = fromIntegral pSize
+        
+        sysread fh = fmap Right (fread s fh offset bufsz)
 
-fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations INode
+fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
+fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
+                                   ; _  <- modifyIORef rfh (const fh)
+                                   ; return (Right $ fromIntegral $ B.length bytes)
+                                   }
+  where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
+
+fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> IO Errno
+fsTruncate s path pOffset = do { fh <- open s path
+                               ; ftruncate s fh offset >>= fsync s
+                               ; return eOK
+                               }
+  where offset = fromIntegral pOffset
+
+fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
+fsFlush s _ rfh = readIORef rfh >>= fsync s >> return eOK
+
+fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
+fsRelease s _ rfh = readIORef rfh >>= fsync s
+
+fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
 fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
                             , fuseCreateDevice         = fsMknod s
@@ -129,14 +160,14 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             , fuseCreateLink           = \_ _ -> return eFAULT
                             , fuseSetFileMode          = \_ _ -> return eOK
                             , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
-                            , fuseSetFileSize          = \_ _ -> return eOK
+                            , fuseSetFileSize          = fsTruncate s
                             , fuseSetFileTimes         = \_ _ _ -> return eOK
                             , fuseOpen                 = fsOpen s
                             , fuseRead                 = fsRead s
-                            , fuseWrite                = \_ _ _ _ -> return (Left eFAULT)
+                            , fuseWrite                = fsWrite s
                             , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
-                            , fuseFlush                = \_ _ -> return eOK
-                            , fuseRelease              = \_ _ -> return ()
+                            , fuseFlush                = fsFlush s
+                            , fuseRelease              = fsRelease s
                             , fuseSynchronizeFile      = \_ _ -> return eOK
                             , fuseOpenDirectory        = \_ -> return eOK
                             , fuseReleaseDirectory     = \_ -> return eOK
@@ -147,4 +178,4 @@ fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
                             }
 
 main :: (StorageHashLike s, StorageEnumLike s) => s -> IO ()
-main s = fuseMain (fuseOps s) defaultExceptionHandler
+main s = fuseMain (debugFuse (fuseOps s)) defaultExceptionHandler
