@@ -53,131 +53,131 @@ debugE msg e
 debug :: String -> IO ()
 debug msg = putStrLn $ "[debug.fuse   ] " ++ msg
 
-debugFuse :: FuseOperations a -> FuseOperations a
-debugFuse backend = FuseOperations { fuseGetFileStat =
+debugger :: FuseOperations a -> FuseOperations a
+debugger backend = FuseOperations { fuseGetFileStat =
                                         \f -> do { result <- fuseGetFileStat backend f
                                                  ; debugEither ("stat " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseReadSymbolicLink =
+                                  , fuseReadSymbolicLink =
                                         \f -> do { result <- fuseReadSymbolicLink backend f
                                                  ; debugEither ("readlink " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseCreateDevice =
+                                  , fuseCreateDevice =
                                         \f a b c -> do { result <- fuseCreateDevice backend f a b c
                                                        ; debugE ("mknod " ++ f) result
                                                        ; return result
                                                        }
-                                   , fuseCreateDirectory      =
+                                  , fuseCreateDirectory      =
                                         \f a -> do { result <- fuseCreateDirectory backend f a
                                                    ; debugE ("mkdir " ++ f) result
                                                    ; return result
                                                    }
-                                   , fuseRemoveLink =
+                                  , fuseRemoveLink =
                                         \f -> do { result <- fuseRemoveLink backend f
                                                  ; debugE ("unlink " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseRemoveDirectory =
+                                  , fuseRemoveDirectory =
                                         \f -> do { result <- fuseRemoveDirectory backend f
                                                  ; debugE ("rmdir " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseCreateSymbolicLink =
+                                  , fuseCreateSymbolicLink =
                                         \f1 f2 -> do { result <- fuseCreateSymbolicLink backend f1 f2
                                                      ; debugE ("symlink " ++ f1 ++ " " ++ f2) result
                                                      ; return result
                                                      }
-                                   , fuseRename =
+                                  , fuseRename =
                                         \f1 f2 -> do { result <- fuseRename backend f1 f2
                                                      ; debugE ("rename " ++ f1 ++ " " ++ f2) result
                                                      ; return result
                                                      }
-                                   , fuseCreateLink =
+                                  , fuseCreateLink =
                                         \f1 f2 -> do { result <- fuseCreateLink backend f1 f2
                                                      ; debugE ("link " ++ f1 ++ " " ++ f2) result
                                                      ; return result
                                                      }
-                                   , fuseSetFileMode =
+                                  , fuseSetFileMode =
                                         \f a -> do { result <- fuseSetFileMode backend f a
                                                    ; debugE ("chmod " ++ f ++ " " ++ show a) result
                                                    ; return result
                                                    }
-                                   , fuseSetOwnerAndGroup =
+                                  , fuseSetOwnerAndGroup =
                                         \f a b -> do { result <- fuseSetOwnerAndGroup backend f a b
                                                      ; debugE ("chown " ++ f ++ " " ++ show a ++ " " ++ show b) result
                                                      ; return result
                                                      }
-                                   , fuseSetFileSize =
+                                  , fuseSetFileSize =
                                         \f a -> do { result <- fuseSetFileSize backend f a
                                                    ; debugE ("truncate " ++ f ++ " " ++ show a) result
                                                    ; return result
                                                    }
-                                   , fuseSetFileTimes =
+                                  , fuseSetFileTimes =
                                         \f a b -> do { result <- fuseSetFileTimes backend f a b
                                                      ; debugE ("utime " ++ show a ++ " " ++ show b) result
                                                      ; return result
                                                      }
-                                   , fuseOpen =
+                                  , fuseOpen =
                                         \f a b -> do { result <- fuseOpen backend f a b
                                                      ; debugEither ("open " ++ f) result
                                                      ; return result
                                                      }
-                                   , fuseRead =
+                                  , fuseRead =
                                         \f a b c -> do { result <- fuseRead backend f a b c
                                                        ; debugEither ("read " ++ f ++ " " ++ show b ++ " " ++ show c) result
                                                        ; return result
                                                        }
-                                   , fuseWrite =
+                                  , fuseWrite =
                                         \f a b c -> do { result <- fuseWrite backend f a b c
                                                        ; debugEither1 ("write " ++ f ++ " " ++ show (B.length b) ++ " " ++ show c) result
                                                        ; return result
                                                        }
-                                   , fuseGetFileSystemStats =
+                                  , fuseGetFileSystemStats =
                                         \s -> do { result <- fuseGetFileSystemStats backend s
                                                  ; debugEither ("statfs " ++ s) result
                                                  ; return result
                                                  }
-                                   , fuseFlush =
+                                  , fuseFlush =
                                         \f a -> do { result <- fuseFlush backend f a
                                                    ; debugE ("flush " ++ f) result
                                                    ; return result
                                                    }
-                                   , fuseRelease =
+                                  , fuseRelease =
                                         \f a -> do { fuseRelease backend f a
                                                    ; debug ("release " ++ f)
                                                    }
-                                   , fuseSynchronizeFile =
+                                  , fuseSynchronizeFile =
                                         \f a -> do { result <- fuseSynchronizeFile backend f a
                                                    ; debugE ("fsync " ++ f) result
                                                    ; return result
                                                    }
-                                   , fuseOpenDirectory =
+                                  , fuseOpenDirectory =
                                         \f -> do { result <- fuseOpenDirectory backend f
                                                  ; debugE ("opendir " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseReadDirectory =
+                                  , fuseReadDirectory =
                                         \f -> do { result <- fuseReadDirectory backend f
                                                  ; debugEither2 ("readdir " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseReleaseDirectory =
+                                  , fuseReleaseDirectory =
                                         \f -> do { result <- fuseReleaseDirectory backend f
                                                  ; debugE ("releasedir " ++ f) result
                                                  ; return result
                                                  }
-                                   , fuseSynchronizeDirectory =           
+                                  , fuseSynchronizeDirectory =           
                                         \f a -> do { result <- fuseSynchronizeDirectory backend f a
                                                    ; debugE ("fsyncdir " ++ f) result
                                                    ; return result
                                                    }
-                                   , fuseAccess =
+                                  , fuseAccess =
                                         \f a -> do { result <- fuseAccess backend f a
                                                    ; debugE ("access " ++ f ++ " " ++ show a) result
                                                    ; return result
                                                    }
-                                   , fuseInit = fuseInit backend >> debug "init"
-                                   , fuseDestroy = fuseDestroy backend >> debug "destroy"
-                                   }
+                                  , fuseInit = fuseInit backend >> debug "init"
+                                  , fuseDestroy = fuseDestroy backend >> debug "destroy"
+                                  }

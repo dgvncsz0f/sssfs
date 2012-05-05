@@ -26,7 +26,9 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module SSSFS.Fuse where
+module SSSFS.Fuse
+       ( sssfsMain
+       ) where
 
 import           Control.Monad
 import           Control.Exception
@@ -38,7 +40,6 @@ import           System.Posix.Types
 import           System.Posix.Files
 import qualified Data.ByteString as B
 import           SSSFS.Except
-import           SSSFS.Fuse.Debug
 import           SSSFS.Storage as S
 import           SSSFS.Filesystem.Types as T
 import           SSSFS.Filesystem.Core
@@ -147,35 +148,35 @@ fsFlush s _ rfh = readIORef rfh >>= fsync s >> return eOK
 fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
 fsRelease s _ rfh = readIORef rfh >>= fsync s
 
-fuseOps :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
-fuseOps s =  FuseOperations { fuseGetFileStat          = fsStat s
-                            , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
-                            , fuseCreateDevice         = fsMknod s
-                            , fuseCreateDirectory      = fsMkdir s
-                            , fuseReadDirectory        = fsReadDir s
-                            , fuseRemoveLink           = \_ -> return eFAULT
-                            , fuseRemoveDirectory      = fsRmdir s
-                            , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
-                            , fuseRename               = \_ _ -> return eFAULT
-                            , fuseCreateLink           = \_ _ -> return eFAULT
-                            , fuseSetFileMode          = \_ _ -> return eOK
-                            , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
-                            , fuseSetFileSize          = fsTruncate s
-                            , fuseSetFileTimes         = \_ _ _ -> return eOK
-                            , fuseOpen                 = fsOpen s
-                            , fuseRead                 = fsRead s
-                            , fuseWrite                = fsWrite s
-                            , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
-                            , fuseFlush                = fsFlush s
-                            , fuseRelease              = fsRelease s
-                            , fuseSynchronizeFile      = \_ _ -> return eOK
-                            , fuseOpenDirectory        = \_ -> return eOK
-                            , fuseReleaseDirectory     = \_ -> return eOK
-                            , fuseSynchronizeDirectory = \_ _ -> return eOK
-                            , fuseAccess               = \_ _ -> return eOK
-                            , fuseInit                 = fsInit s
-                            , fuseDestroy              = return ()
-                            }
+sssfs :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
+sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
+                          , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
+                          , fuseCreateDevice         = fsMknod s
+                          , fuseCreateDirectory      = fsMkdir s
+                          , fuseReadDirectory        = fsReadDir s
+                          , fuseRemoveLink           = \_ -> return eFAULT
+                          , fuseRemoveDirectory      = fsRmdir s
+                          , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
+                          , fuseRename               = \_ _ -> return eFAULT
+                          , fuseCreateLink           = \_ _ -> return eFAULT
+                          , fuseSetFileMode          = \_ _ -> return eOK
+                          , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
+                          , fuseSetFileSize          = fsTruncate s
+                          , fuseSetFileTimes         = \_ _ _ -> return eOK
+                          , fuseOpen                 = fsOpen s
+                          , fuseRead                 = fsRead s
+                          , fuseWrite                = fsWrite s
+                          , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
+                          , fuseFlush                = fsFlush s
+                          , fuseRelease              = fsRelease s
+                          , fuseSynchronizeFile      = \_ _ -> return eOK
+                          , fuseOpenDirectory        = \_ -> return eOK
+                          , fuseReleaseDirectory     = \_ -> return eOK
+                          , fuseSynchronizeDirectory = \_ _ -> return eOK
+                          , fuseAccess               = \_ _ -> return eOK
+                          , fuseInit                 = fsInit s
+                          , fuseDestroy              = return ()
+                          }
 
-main :: (StorageHashLike s, StorageEnumLike s) => s -> IO ()
-main s = fuseMain (debugFuse (fuseOps s)) defaultExceptionHandler
+sssfsMain :: (StorageHashLike s, StorageEnumLike s) => s -> (FuseOperations FHandle -> FuseOperations FHandle) -> IO ()
+sssfsMain s f = fuseMain (f $ sssfs s) defaultExceptionHandler

@@ -27,10 +27,65 @@
 
 module Main where
 
-import qualified SSSFS.Fuse as F
-import           SSSFS.Storage.Local as L
-import           SSSFS.Storage.Debug as D
+import           Data.Char
+import           System.Console.GetOpt
+import           System.Environment
+import           SSSFS.Fuse
+import           SSSFS.Fuse.Debug
+import qualified SSSFS.Storage.Local as L
+import qualified SSSFS.Storage.Debug as D
+
+data Options = Options { rootdir     :: String
+                       , mountpt     :: String
+                       , optDebug    :: Bool
+                       , optFuseOpts :: [String]
+                       } deriving Show
+
+options :: [OptDescr (Options -> Options)]
+options = [ Option ['d'] ["debug"]
+            (NoArg (\opts -> opts { optDebug = True }))
+            "print debug information on stdout/stderr"
+          , Option ['o'] ["fuse-opt"]
+            (ReqArg (\s opts -> opts { optFuseOpts = optFuseOpts opts ++ makeOpt s })
+                    "OPT")
+            "Fuse mount option (may be used multiple times)"
+          ]
+  where makeOpt s = let (a, b) = break isSpace s
+                    in filter (not . null) [a, drop 1 b]
+
+defaultOptions :: Options
+defaultOptions = Options { rootdir     = ""
+                         , mountpt     = ""
+                         , optDebug    = False
+                         , optFuseOpts = []
+                         }
+
+sssfsOptions :: String -> [String] -> Either String Options
+sssfsOptions prg argv = case (getOpt Permute options argv) 
+                        of (o,[a,b],[])
+                             -> Right $ (foldl (flip id) defaultOptions o) { rootdir = a, mountpt = b}
+                           (_,_,errs)
+                             -> Left $ concat errs ++ usageInfo header options
+  where header = "Usage: "++ prg ++" [OPTIONS...] rootdir mountpoint"
 
 main :: IO ()
-main = F.main (D.new (L.new "/home/dsouza/tmp/sssfs"))
--- main = F.main (L.new "/home/dsouza/tmp/sssfs")
+main = do { prg  <- getProgName
+          ; mopts <- fmap (sssfsOptions prg) getArgs
+          ; case mopts
+            of Left err
+                 -> error err
+               Right opts
+                 -> withArgs (fuseOpts opts) $ exec (storage opts) (fuseDbg opts)
+          }
+  where storage opts
+           | optDebug opts = Left $ D.new $ L.new $ rootdir opts
+           | otherwise     = Right $ L.new $ rootdir opts
+        
+        fuseDbg opts
+          | optDebug opts = debugger
+          | otherwise     = id
+
+        fuseOpts opts = optFuseOpts opts ++ [mountpt opts]
+        
+        exec (Left s)  = sssfsMain s
+        exec (Right s) = sssfsMain s
