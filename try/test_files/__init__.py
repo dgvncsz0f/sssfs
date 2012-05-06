@@ -27,11 +27,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import os
 import tempfile
 import base
 
 fuse_handle = None
-mountpoint  = "%s/test_directories" % (tempfile.gettempdir(),)
+mountpoint  = "%s/test_files" % (tempfile.gettempdir(),)
 filepath    = base.generic_filepath(mountpoint)
 
 def setup(self):
@@ -41,3 +42,11 @@ def setup(self):
 def teardown(self):
     global fuse_handle
     base.generic_teardown(fuse_handle)
+
+def touch(f):
+    open(f, "a").close()
+    return(os.stat(f))
+
+def truncate(f):
+    open(f, "w").close()
+    return(os.stat(f))

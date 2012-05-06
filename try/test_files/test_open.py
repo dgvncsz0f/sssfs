@@ -27,17 +27,53 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import tempfile
+import os
+import posix
+import time
 import base
+from exceptions import OSError
+from nose.tools import *
+from test_files import filepath
+from test_files import truncate
+from test_files import touch
 
-fuse_handle = None
-mountpoint  = "%s/test_directories" % (tempfile.gettempdir(),)
-filepath    = base.generic_filepath(mountpoint)
+def test_open_rdonly_should_raise_exception_when_file_does_not_exist():
+    d = filepath()
+    assert_raises(OSError, posix.open, d, posix.O_RDONLY)
 
-def setup(self):
-    global fuse_handle
-    fuse_handle = base.generic_setup(mountpoint)
+def test_open_rdonly_should_not_allow_writing():
+    d = filepath()
+    touch(d)
+    fd = posix.open(d, posix.O_RDONLY)
+    assert_raises(OSError, posix.write, fd, "foobar")
+    posix.close(fd)
 
-def teardown(self):
-    global fuse_handle
-    base.generic_teardown(fuse_handle)
+def test_open_wronly_should_raise_exception_when_file_does_not_exist():
+    d = filepath()
+    assert_raises(OSError, posix.open, d, posix.O_WRONLY)
+
+def test_open_truncate_set_size_to_zero():
+    d = filepath()
+    with open(d, "w") as f:
+        f.write("foobar")
+    assert_greater(os.stat(d).st_size, 0)
+    posix.close(posix.open(d, posix.O_RDWR | posix.O_TRUNC))
+    assert_equals(os.stat(d).st_size, 0)
+
+@base.skip_on_fail
+def test_open_update_atime():
+    d  = filepath()
+    s0 = touch(d)
+    time.sleep(1)
+    posix.close(posix.open(d, posix.O_RDONLY))
+    s1 = os.stat(d)
+    assert_less(s0.st_atime, s1.st_atime)
+
+@base.skip_on_fail
+def test_open_update_ctime():
+    d  = filepath()
+    s0 = touch(d)
+    time.sleep(1)
+    posix.close(posix.open(d, posix.O_WRONLY))
+    s1 = os.stat(d)
+    assert_less(s0.st_ctime, s1.st_ctime)

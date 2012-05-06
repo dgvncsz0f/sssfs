@@ -27,17 +27,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import tempfile
+import os
 import base
+from nose.tools import *
+from test_files import filepath
 
-fuse_handle = None
-mountpoint  = "%s/test_directories" % (tempfile.gettempdir(),)
-filepath    = base.generic_filepath(mountpoint)
-
-def setup(self):
-    global fuse_handle
-    fuse_handle = base.generic_setup(mountpoint)
-
-def teardown(self):
-    global fuse_handle
-    base.generic_teardown(fuse_handle)
+def test_stat_should_return_the_correct_type_for_directories():
+    d = filepath()
+    os.mkdir(d)
+    s = os.stat(d)
+    print(s)
+    

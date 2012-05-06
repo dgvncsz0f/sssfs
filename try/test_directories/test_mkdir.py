@@ -27,9 +27,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import base
 import os
 import time
+import base
 from exceptions       import OSError
 from nose.tools       import *
 from test_directories import filepath
@@ -63,8 +63,8 @@ def test_mkdir_should_update_ctime_and_mtime():
     time.sleep(1)
     os.mkdir(filepath(d, "1"))
     s1 = os.stat(d)
-    assert_true(s0.st_mtime < s1.st_mtime, u"s0.st_mtime ≮ s1.st_mtime")
-    assert_true(s0.st_ctime < s1.st_ctime, u"s0.st_ctime ≮ s1.st_ctime")
+    assert_less(s0.st_mtime, s1.st_mtime)
+    assert_less(s0.st_ctime, s1.st_ctime)
 
 @base.skip_on_fail
 def test_open_should_update_atime():
@@ -74,4 +74,4 @@ def test_open_should_update_atime():
     time.sleep(1)
     os.listdir(d)
     s1 = os.stat(d)
-    assert_true(s0.st_atime < s1.st_atime, u"s0.st_atime ≮ s1.st_atime")
+    assert_less(s0.st_atime, s1.st_atime)
