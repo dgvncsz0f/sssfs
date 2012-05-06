@@ -51,13 +51,15 @@ module SSSFS.Storage
        ) where
 
 import           Codec.Text.Raw
+-- import           Codec.Utils
 import           Control.Monad.IO.Class
 import           Data.IterIO
 import qualified Data.Serialize as S
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import           Data.Text.Encoding
-import           Data.Digest.SHA256
+-- import           Data.Digest.SHA1 as SHA1
+import           Data.Digest.SHA256 as SHA256
 import           Text.PrettyPrint.HughesPJ (render)
 import           GHC.Exts
 
@@ -126,9 +128,11 @@ class (StorageHashLike s, StorageEnumLike s) => StorageContext s r where
 enumKey :: (MonadIO m, StorageHashLike s) => s -> Key -> Onum B.ByteString m ()
 enumKey s l = mkInumC id noCtl (liftIO $ get s l)
 
--- | Currently computes the sha256 of a given bytestring.
+-- | Currently computes the sha1 of a given bytestring.
 computeHash :: B.ByteString -> String
-computeHash = render . hexdumpBy "" 64 . hash . B.unpack
+computeHash = render . hexdumpBy "" 64 . shasum . B.unpack
+  where -- shasum = toOctets 256 . SHA1.toInteger . SHA1.hash
+        shasum = SHA256.hash
 
 instance IsString Ref where
   fromString = Ref . T.pack
