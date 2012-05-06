@@ -29,23 +29,49 @@
 
 import base
 import os
-import os.path
-from nose.tools       import ok_
-from nose.tools       import eq_
+import time
+from exceptions       import OSError
+from nose.tools       import *
 from test_directories import filepath
 
 def test_mkdir_should_create_directory():
     d = filepath()
     os.mkdir(d)
-    ok_(os.path.isdir(d))
+    assert_true(os.path.isdir(d), u"¬ isdir(%s)" % d)
 
 def test_mkdir_should_create_empty_directory():
     d = filepath()
     os.mkdir(d)
-    eq_(os.listdir(d), [])
+    assert_equals(os.listdir(d), [])
 
 def test_mkdir_should_work_recursively():
     d = filepath()
     os.mkdir(d)
     os.mkdir(filepath(d, "1"))
-    eq_(os.listdir(d), ["1"])
+    assert_equals(os.listdir(d), ["1"])
+
+def test_mkdir_twice_should_fail():
+    d = filepath()
+    os.mkdir(d)
+    assert_raises(OSError, os.mkdir, d)
+
+@base.skip_on_fail
+def test_mkdir_should_update_ctime_and_mtime():
+    d = filepath()
+    os.mkdir(d)
+    s0 = os.stat(d)
+    time.sleep(1)
+    os.mkdir(filepath(d, "1"))
+    s1 = os.stat(d)
+    assert_true(s0.st_mtime < s1.st_mtime, u"s0.st_mtime ≮ s1.st_mtime")
+    assert_true(s0.st_ctime < s1.st_ctime, u"s0.st_ctime ≮ s1.st_ctime")
+
+@base.skip_on_fail
+def test_open_should_update_atime():
+    d = filepath()
+    os.mkdir(d)
+    s0 = os.stat(d)
+    time.sleep(1)
+    os.listdir(d)
+    s1 = os.stat(d)
+    assert_true(s0.st_atime < s1.st_atime, u"s0.st_atime ≮ s1.st_atime")

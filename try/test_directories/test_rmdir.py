@@ -29,21 +29,37 @@
 
 import base
 import os
-import os.path
-import exceptions
-from nose.tools       import ok_
-from nose.tools       import raises
+import time
+from exceptions       import OSError
+from nose.tools       import *
 from test_directories import filepath
 
 def test_rmdir_should_remove_directory():
     d = filepath()
     os.mkdir(d)
     os.rmdir(d)
-    ok_(not os.path.exists(d))
+    assert_false(os.path.exists(d), "exists(%s)" % d)
 
-@raises(exceptions.OSError)
 def test_rmdir_should_only_remove_empty_dirs():
     d = filepath()
     os.mkdir(d)
     os.mkdir(filepath(d, "1"))
+    assert_raises(OSError, os.rmdir, d)
+
+def test_rmdir_twice_should_fail():
+    d = filepath()
+    os.mkdir(d)
     os.rmdir(d)
+    assert_raises(OSError, os.rmdir, d)
+
+@base.skip_on_fail
+def test_rmdir_should_update_ctime_and_mtime():
+    d = filepath()
+    os.mkdir(d)
+    os.mkdir(filepath(d, "1"))
+    s0 = os.stat(d)
+    time.sleep(1)
+    os.rmdir(filepath(d, "1"))
+    s1 = os.stat(d)
+    assert_true(s0.st_mtime < s1.st_mtime, u"s0.st_mtime ≮ s1.st_mtime")
+    assert_true(s0.st_ctime < s1.st_ctime, u"s0.st_ctime ≮ s1.st_ctime")

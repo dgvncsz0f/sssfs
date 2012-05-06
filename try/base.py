@@ -29,12 +29,22 @@
 
 import sys
 import os
-import os.path
 import popen2
 import tempfile
 import shutil
 import time
-from contextlib import contextmanager
+from exceptions        import AssertionError
+from nose.plugins.skip import SkipTest
+from contextlib        import contextmanager
+
+def skip_on_fail(f):
+    def proxy_f(*args, **kwargs):
+        try:
+            return(f(*args, **kwargs))
+        except AssertionError:
+            raise(SkipTest())
+    proxy_f.__name__ = f.__name__
+    return(proxy_f)
 
 def debug(msg):
     print("[debug] %s" % msg)
@@ -76,9 +86,10 @@ def umount(handle):
 
 def silently(f, *args, **kwargs):
     try:
-        return(f(*args, **kwargs))
+        f(*args, **kwargs)
+        return(True)
     except:
-        pass
+        return(False)
 
 def generic_setup(mountpt):
     handle = mount()
