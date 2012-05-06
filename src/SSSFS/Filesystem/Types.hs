@@ -212,7 +212,7 @@ toList :: Metadata -> [(T.Text, T.Text)]
 toList = map decodePair
 
 fromOID :: OID -> Key
-fromOID o = fromStr "i" ++ computeHash o
+fromOID o = fromStr "i" ++ (fromStr $ computeHash o)
 
 fromLinkName :: OID -> String -> Key
 fromLinkName o n = fromOID o ++ fromStr n
@@ -220,14 +220,18 @@ fromLinkName o n = fromOID o ++ fromStr n
 fromStorageUnit :: StorageUnit -> Either Key (OID -> Key)
 fromStorageUnit u = case u
         of INodeUnit _ _
-             -> Left $ fromStr "d" ++ computeHash v
+             -> Left $ fromStr "d" ++ hashKey
            DataBlockUnit _
-             -> Left $ fromStr "d" ++ computeHash v
+             -> Left $ fromStr "d" ++ hashKey
            INodePtrUnit o _
              -> Left $ fromOID o
            DirEntUnit n _
              -> Right $ \o -> fromLinkName o n
-  where v = value u
+  where v  = value u
+
+        hashValue = computeHash v
+
+        hashKey = map ref [take 2 hashValue, take 3 $ drop 3 hashValue, hashValue]
 
 value :: (S.Serialize a) => a -> B.ByteString
 value = S.encode

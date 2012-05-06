@@ -159,7 +159,7 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                  }
                                   , fuseReadDirectory =
                                         \f -> do { result <- fuseReadDirectory backend f
-                                                 ; debugEither ("readdir " ++ f) (show . map snd) result
+                                                 ; debugEither ("readdir " ++ f) (show . map fst) result
                                                  ; return result
                                                  }
                                   , fuseReleaseDirectory =

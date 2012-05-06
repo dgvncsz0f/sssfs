@@ -58,11 +58,17 @@ new = LocalStorage
 -- partition is atomic. You better be using a local filesystem.
 atomicWrite :: FilePath -> B.ByteString -> IO ()
 atomicWrite dst contents = let dir = takeDirectory dst
-                           in do { (tmpF, tmpH) <- openBinaryTempFile dir "x-write.XXX"
+                           in do { (tmpF, tmpH) <- openBinaryTempFile dir ".localstorage.XXXX"
                                  ; B.hPut tmpH contents
                                  ; hClose tmpH
                                  ; renameFile tmpF dst
                                  }
+
+-- unsafeWrite :: FilePath -> B.ByteString -> IO ()
+-- unsafeWrite dst contents = do { fh <- openBinaryFile dst WriteMode
+--                               ; B.hPut fh contents
+--                               ; hClose fh
+--                               }
 
 readContent :: FilePath -> IO B.ByteString
 readContent file = do { h <- openBinaryFile file ReadMode

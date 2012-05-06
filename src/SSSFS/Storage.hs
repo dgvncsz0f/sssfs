@@ -127,8 +127,8 @@ enumKey :: (MonadIO m, StorageHashLike s) => s -> Key -> Onum B.ByteString m ()
 enumKey s l = mkInumC id noCtl (liftIO $ get s l)
 
 -- | Currently computes the sha256 of a given bytestring.
-computeHash :: B.ByteString -> Key
-computeHash = fromStr . render . hexdumpBy "" 64 . hash . B.unpack
+computeHash :: B.ByteString -> String
+computeHash = render . hexdumpBy "" 64 . hash . B.unpack
 
 instance IsString Ref where
   fromString = Ref . T.pack

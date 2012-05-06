@@ -78,7 +78,7 @@ fstat :: (StorageHashLike s) => s -> FileHandle -> IO INode
 fstat _ = return
 
 fwrite :: (StorageHashLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
-fwrite s fh raw offset = do { nBlocks <- fmap chunks (load s fh blkIx)
+fwrite s fh raw offset = do { nBlocks <- fmap chunks sysload
                             ; inum    <- stores s fh blkIx nBlocks
                             ; return inum
                             }
@@ -86,6 +86,12 @@ fwrite s fh raw offset = do { nBlocks <- fmap chunks (load s fh blkIx)
         
         chunks oBlock = toChunks (writeB seek oBlock raw) (blksz fh)
         
+        fullBlock = seek==0 && B.length raw >= (blksz fh)
+
+        sysload
+          | fullBlock = return B.empty
+          | otherwise = load s fh blkIx
+
 
 fsync :: (StorageHashLike s) => s -> FileHandle -> IO ()
 fsync s fh = sync s fh

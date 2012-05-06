@@ -34,6 +34,7 @@ import           Control.Monad
 import           Control.Exception
 import           Data.Bits
 import           Data.IORef
+import qualified Data.Map as M
 import           Foreign.C.Error
 import           System.Fuse as F
 import           System.Posix.Types
@@ -59,8 +60,8 @@ inodeToFileStat inum = FileStat { statEntryType        = itypeToEntryType (itype
                                 , statFileOwner        = 1000
                                 , statFileGroup        = 1000
                                 , statSpecialDeviceID  = 0
-                                , statFileSize         = fromInteger (size inum)
-                                , statBlocks           = 0
+                                , statFileSize         = fromIntegral (size inum)
+                                , statBlocks           = fromIntegral (numBlocks * blkFactor)
                                 , statAccessTime       = fromIntegral (fst $ atime inum)
                                 , statModificationTime = fromIntegral (fst $ mtime inum)
                                 , statStatusChangeTime = fromIntegral (fst $ ctime inum)
@@ -70,6 +71,9 @@ inodeToFileStat inum = FileStat { statEntryType        = itypeToEntryType (itype
                      -> ownerReadMode .|. ownerWriteMode
                    T.Directory 
                      -> ownerReadMode .|. ownerWriteMode .|. ownerExecuteMode
+        
+        numBlocks = M.size (blocks inum)
+        blkFactor = blksz inum `div` 512
 
 install :: IO a -> (Errno -> IO a) -> IO a
 install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
@@ -131,7 +135,7 @@ fsRead s _ rfh pSize pOffset = readIORef rfh >>= sysread
 fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
 fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
                                    ; _  <- modifyIORef rfh (const fh)
-                                   ; sync s fh -- TODO: set direct_io flag when opening file
+                                   -- ; sync s fh -- TODO!
                                    ; return (Right $ fromIntegral $ B.length bytes)
                                    }
   where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
