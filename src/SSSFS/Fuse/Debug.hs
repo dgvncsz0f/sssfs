@@ -103,10 +103,12 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                      ; return result
                                                      }
                                   , fuseSetFileSize =
-                                        \f a -> do { result <- fuseSetFileSize backend f a
-                                                   ; debugE ("truncate " ++ f ++ " " ++ show a) result
-                                                   ; return result
-                                                   }
+                                        \f a b -> do { result <- fuseSetFileSize backend f a b
+                                                     ; case b
+                                                       of Nothing -> debugE ("truncate " ++ f ++ " " ++ show a) result
+                                                          Just _  -> debugE ("ftruncate " ++ f ++ " " ++ show a) result
+                                                     ; return result
+                                                     }
                                   , fuseSetFileTimes =
                                         \f a b -> do { result <- fuseSetFileTimes backend f a b
                                                      ; debugE ("utime " ++ show a ++ " " ++ show b) result

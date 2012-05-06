@@ -136,12 +136,16 @@ fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
                                    }
   where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
 
-fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> IO Errno
-fsTruncate s path pOffset = do { fh <- open s path
-                               ; ftruncate s fh offset >>= fsync s
-                               ; return eOK
-                               }
-  where offset = fromIntegral pOffset
+fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
+fsTruncate s path pOffset Nothing = do { fh <- open s path
+                                       ; ftruncate s fh (fromIntegral pOffset) >>= fsync s
+                                       ; return eOK
+                                       }
+fsTruncate s _ pOffset (Just rfh) = do { fh <- readIORef rfh >>= flip (ftruncate s) (fromIntegral pOffset)
+                                       ; _  <- modifyIORef rfh (const fh)
+                                       ; sync s fh
+                                       ; return eOK
+                                       }
 
 fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
 fsFlush s _ rfh = readIORef rfh >>= fsync s >> return eOK
