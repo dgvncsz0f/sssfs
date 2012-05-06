@@ -36,5 +36,4 @@ def test_stat_should_return_the_correct_type_for_directories():
     d = filepath()
     os.mkdir(d)
     s = os.stat(d)
-    print(s)
     

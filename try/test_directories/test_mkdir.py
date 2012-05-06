@@ -34,7 +34,7 @@ from exceptions       import OSError
 from nose.tools       import *
 from test_directories import filepath
 
-def test_mkdir_should_create_directory():
+def test_mkdir():
     d = filepath()
     os.mkdir(d)
     assert_true(os.path.isdir(d), u"¬ isdir(%s)" % d)

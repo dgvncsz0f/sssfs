@@ -33,9 +33,13 @@ import popen2
 import tempfile
 import shutil
 import time
+import random
 from exceptions        import AssertionError
 from nose.plugins.skip import SkipTest
 from contextlib        import contextmanager
+
+def cfg(key, default=None):
+    return(os.environ.get("_%s" % key, default))
 
 def skip_on_fail(f):
     def proxy_f(*args, **kwargs):
@@ -59,9 +63,9 @@ def which(prg):
            }
     return(path[prg])
 
-def rootdir():
+def project_filepath(f):
     this = os.path.dirname(os.path.realpath(__file__))
-    return(os.path.realpath(os.path.join(this, "..")))
+    return(os.path.realpath(os.path.join(this, "..", f)))
 
 def mountpoint(handle):
     return("%s/fuse" % handle)
@@ -71,7 +75,7 @@ def mount():
     root = "%s/root" % tmp
     fuse = mountpoint(tmp)
     map(os.mkdir, (root, fuse))
-    cmd  = ("%s/src/sssfs" % rootdir(), root, fuse)
+    cmd  = (project_filepath("src/sssfs"), root, fuse)
     rc = system(cmd)
     if (rc):
         debug("mount %s" % tmp)
@@ -92,16 +96,21 @@ def silently(f, *args, **kwargs):
         return(False)
 
 def generic_setup(mountpt):
-    handle = mount()
     silently(os.unlink, mountpt)
-    os.symlink(mountpoint(handle), mountpt)
-    debug("setup %s [%s]" % (mountpt, handle))
+    if (cfg("extmount") is None):
+        handle = mount()
+        os.symlink(mountpoint(handle), mountpt)
+    else:
+        handle = None
+        os.symlink(cfg("extmount"), mountpt)
+    debug("setup %s [%s]" % (handle, mountpt))
     return((handle, mountpt))
 
 def generic_teardown(handle):
     debug("teardown %s [%s]" % handle)
-    umount(handle[0])
     silently(os.unlink, handle[1])
+    if (cfg("extmount") is None):
+        umount(handle[0])
 
 def generic_filepath(mountpt):
     def f(*args):
@@ -114,8 +123,27 @@ def generic_filepath(mountpt):
         return(r)
     return(f)
 
+def random_data(fd, size):
+    written  = 0
+    pagesize = os.sysconf("SC_PAGE_SIZE")
+    with open(project_filepath("try/fixtures/lorem"), "r") as fh:
+        words = fh.read().replace("\n", "").replace(".", "").replace(",", "").split()
+    while (size > 0):
+        random.shuffle(words)
+        page     = " ".join(words)[:pagesize]
+        written += os.write(fd, page[:size])
+        size    -= len(page)
+    return(written)
+
 @contextmanager
 def sssfs():
     handle = mount()
     yield(mountpoint(handle))
     umount(handle)
+
+@contextmanager
+def posix_open(*args, **kwargs):
+    fd = os.open(*args, **kwargs)
+    yield(fd)
+    os.close(fd)
+

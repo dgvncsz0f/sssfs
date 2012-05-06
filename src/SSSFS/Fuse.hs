@@ -91,7 +91,7 @@ exToErrno f = install (f >> return eOK) (return)
 
 fsMknod :: (StorageHashLike s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 fsMknod s path RegularFile _ _ = exToErrno (creat s path >> return ())
-fsMknod _ _ _ _ _              = return eFAULT
+fsMknod _ _ _ _ _              = return eNOSYS
 
 fsMkdir :: (StorageHashLike s) => s -> FilePath -> FileMode -> IO Errno
 fsMkdir s path _ = exToErrno f
@@ -105,9 +105,9 @@ fsRmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO Errno
 fsRmdir s path = exToErrno f
   where f = rmdir s path
 
-fsStat :: (StorageHashLike s) => s -> FilePath -> IO (Either Errno FileStat)
-fsStat s path = exToEither f
-  where f = fmap inodeToFileStat (stat s path)
+fsStat :: (StorageHashLike s) => s -> FilePath -> Maybe FHandle -> IO (Either Errno FileStat)
+fsStat s path Nothing = exToEither (fmap inodeToFileStat (stat s path))
+fsStat s _ (Just rfh) = exToEither (fmap inodeToFileStat (readIORef rfh >>= fstat s))
 
 fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
 fsOpen s path _ _ = exToEither f
@@ -126,11 +126,12 @@ fsRead s _ rfh pSize pOffset = readIORef rfh >>= sysread
         
         bufsz = fromIntegral pSize
         
-        sysread fh = fmap Right (fread s fh offset bufsz)
+        sysread fh = print fh >> fmap Right (fread s fh offset bufsz)
 
 fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
 fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
                                    ; _  <- modifyIORef rfh (const fh)
+                                   ; sync s fh -- TODO: set direct_io flag when opening file
                                    ; return (Right $ fromIntegral $ B.length bytes)
                                    }
   where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
@@ -145,20 +146,23 @@ fsTruncate s path pOffset = do { fh <- open s path
 fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
 fsFlush s _ rfh = readIORef rfh >>= fsync s >> return eOK
 
+fsFSync :: (StorageHashLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
+fsFSync s _ _ rfh = readIORef rfh >>= fsync s >> return eOK
+
 fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
 fsRelease s _ rfh = readIORef rfh >>= fsync s
 
 sssfs :: (StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
 sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
-                          , fuseReadSymbolicLink     = \_ -> return (Left eFAULT)
+                          , fuseReadSymbolicLink     = \_ -> return (Left eNOSYS)
                           , fuseCreateDevice         = fsMknod s
                           , fuseCreateDirectory      = fsMkdir s
                           , fuseReadDirectory        = fsReadDir s
-                          , fuseRemoveLink           = \_ -> return eFAULT
+                          , fuseRemoveLink           = \_ -> return eNOSYS
                           , fuseRemoveDirectory      = fsRmdir s
-                          , fuseCreateSymbolicLink   = \_ _ -> return eFAULT
-                          , fuseRename               = \_ _ -> return eFAULT
-                          , fuseCreateLink           = \_ _ -> return eFAULT
+                          , fuseCreateSymbolicLink   = \_ _ -> return eNOSYS
+                          , fuseRename               = \_ _ -> return eNOSYS
+                          , fuseCreateLink           = \_ _ -> return eNOSYS
                           , fuseSetFileMode          = \_ _ -> return eOK
                           , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
                           , fuseSetFileSize          = fsTruncate s
@@ -166,10 +170,10 @@ sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
                           , fuseOpen                 = fsOpen s
                           , fuseRead                 = fsRead s
                           , fuseWrite                = fsWrite s
-                          , fuseGetFileSystemStats   = \_ -> return (Left eFAULT)
+                          , fuseGetFileSystemStats   = \_ -> return (Left eNOSYS)
                           , fuseFlush                = fsFlush s
                           , fuseRelease              = fsRelease s
-                          , fuseSynchronizeFile      = \_ _ -> return eOK
+                          , fuseSynchronizeFile      = fsFSync s
                           , fuseOpenDirectory        = \_ -> return eOK
                           , fuseReleaseDirectory     = \_ -> return eOK
                           , fuseSynchronizeDirectory = \_ _ -> return eOK

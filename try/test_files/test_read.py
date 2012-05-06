@@ -30,36 +30,50 @@
 import os
 import time
 import base
-from exceptions       import OSError
-from nose.tools       import *
-from test_directories import filepath
+import random
+from exceptions import OSError
+from nose.tools import *
+from test_files import filepath
+from test_files import truncate
+from test_files import touch
 
-def test_rmdir():
-    d = filepath()
-    os.mkdir(d)
-    os.rmdir(d)
-    assert_false(os.path.exists(d), "exists(%s)" % d)
+def test_read():
+    f = filepath()
+    with open(f, "w") as fh:
+        fh.write("foobar")
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        assert_equals("foobar", os.read(fd, 6))
 
-def test_rmdir_should_only_remove_empty_dirs():
-    d = filepath()
-    os.mkdir(d)
-    os.mkdir(filepath(d, "1"))
-    assert_raises(OSError, os.rmdir, d)
+def test_read_returns_eof_corretly():
+    f = filepath()
+    with open(f, "w") as fh:
+        fh.write("foobar")
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        os.read(fd, 6)
+        assert_equals("", os.read(fd, 6))
 
-def test_rmdir_twice_should_fail():
-    d = filepath()
-    os.mkdir(d)
-    os.rmdir(d)
-    assert_raises(OSError, os.rmdir, d)
+def test_read_greater_than_pagesize():
+    f = filepath()
+    s = os.sysconf("SC_PAGE_SIZE") * 2 + 1
+    with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
+        base.random_data(fd, s)
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        assert_equals(s, len(os.read(fd, s)))
 
-@base.skip_on_fail
-def test_rmdir_should_update_ctime_and_mtime():
-    d = filepath()
-    os.mkdir(d)
-    os.mkdir(filepath(d, "1"))
-    s0 = os.stat(d)
-    time.sleep(1)
-    os.rmdir(filepath(d, "1"))
-    s1 = os.stat(d)
-    assert_less(s0.st_mtime, s1.st_mtime)
-    assert_less(s0.st_ctime, s1.st_ctime)
+def test_read_with_buffersize_greater_than_file():
+    f = filepath()
+    with open(f, "w") as fh:
+        fh.write("foobar")
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        assert_equals("foobar", os.read(fd, 1024))
+
+def test_read_and_stat_size_field():
+    f = filepath()
+    with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
+        written = base.random_data(fd, random.randint(1024, 8192))
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        data = os.read(fd, 8192)
+        stat = os.fstat(fd)
+        assert_equals(written, len(data))
+        assert_equals(written, stat.st_size)
+

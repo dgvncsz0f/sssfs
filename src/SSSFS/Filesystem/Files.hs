@@ -33,6 +33,7 @@ module SSSFS.Filesystem.Files
        , fwrite
        , fsync
        , ftruncate
+       , fstat
        ) where
 
 import qualified Data.ByteString as B
@@ -72,6 +73,9 @@ freadChunks s fh offset bufsz = do { bHead <- fmap (slice bufsz seek) (load s fh
 
         readTail 0      = return []
         readTail bCount = freadChunks s fh (offset + (fromIntegral bCount)) (bufsz - bCount)
+
+fstat :: (StorageHashLike s) => s -> FileHandle -> IO INode
+fstat _ = return
 
 fwrite :: (StorageHashLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
 fwrite s fh raw offset = do { nBlocks <- fmap chunks (load s fh blkIx)

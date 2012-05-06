@@ -28,7 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import posix
 import time
 import base
 from exceptions import OSError
@@ -38,42 +37,44 @@ from test_files import truncate
 from test_files import touch
 
 def test_open_rdonly_should_raise_exception_when_file_does_not_exist():
-    d = filepath()
-    assert_raises(OSError, posix.open, d, posix.O_RDONLY)
+    f = filepath()
+    assert_raises(OSError, os.open, f, os.O_RDONLY)
 
 def test_open_rdonly_should_not_allow_writing():
-    d = filepath()
-    touch(d)
-    fd = posix.open(d, posix.O_RDONLY)
-    assert_raises(OSError, posix.write, fd, "foobar")
-    posix.close(fd)
+    f = filepath()
+    touch(f)
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        assert_raises(OSError, os.write, fd, "foobar")
 
 def test_open_wronly_should_raise_exception_when_file_does_not_exist():
-    d = filepath()
-    assert_raises(OSError, posix.open, d, posix.O_WRONLY)
+    f = filepath()
+    assert_raises(OSError, os.open, f, os.O_WRONLY)
 
 def test_open_truncate_set_size_to_zero():
-    d = filepath()
-    with open(d, "w") as f:
-        f.write("foobar")
-    assert_greater(os.stat(d).st_size, 0)
-    posix.close(posix.open(d, posix.O_RDWR | posix.O_TRUNC))
-    assert_equals(os.stat(d).st_size, 0)
+    f = filepath()
+    with open(f, "w") as fh:
+        fh.write("foobar")
+    assert_greater(os.stat(f).st_size, 0)
+    with base.posix_open(f, os.O_RDWR | os.O_TRUNC) as fd:
+        pass
+    assert_equals(os.stat(f).st_size, 0)
 
 @base.skip_on_fail
 def test_open_update_atime():
-    d  = filepath()
-    s0 = touch(d)
+    f  = filepath()
+    s0 = touch(f)
     time.sleep(1)
-    posix.close(posix.open(d, posix.O_RDONLY))
-    s1 = os.stat(d)
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        pass
+    s1 = os.stat(f)
     assert_less(s0.st_atime, s1.st_atime)
 
 @base.skip_on_fail
 def test_open_update_ctime():
-    d  = filepath()
-    s0 = touch(d)
+    f  = filepath()
+    s0 = touch(f)
     time.sleep(1)
-    posix.close(posix.open(d, posix.O_WRONLY))
-    s1 = os.stat(d)
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        pass
+    s1 = os.stat(f)
     assert_less(s0.st_ctime, s1.st_ctime)

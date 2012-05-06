@@ -30,20 +30,11 @@ module SSSFS.Fuse.Debug where
 
 import           Foreign.C.Error
 import           System.Fuse as F
-import           System.Posix.Types
 import qualified Data.ByteString as B
 
-debugEither :: String -> Either a b -> IO ()
-debugEither msg (Right _) = putStrLn $ "[debug.fuse    ] " ++ msg ++ " - ok"
-debugEither msg (Left _)  = putStrLn $ "[debug.fuse    ] " ++ msg ++ " - fail"
-
-debugEither1 :: String -> Either a ByteCount -> IO ()
-debugEither1 msg (Right b) = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - ok : " ++ show b
-debugEither1 msg (Left _)  = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - fail"
-
-debugEither2 :: String -> Either a [(FilePath, FileStat)] -> IO ()
-debugEither2 msg (Right b) = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - ok : " ++ show (map fst b)
-debugEither2 msg (Left _)  = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - fail"
+debugEither :: String -> (b -> String) -> Either a b -> IO ()
+debugEither msg f (Right b) = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - ok/" ++ f b
+debugEither msg _ (Left _)  = putStrLn $ "[debug.fuse   ] " ++ msg ++ " - fail"
 
 debugE :: String -> Errno -> IO ()
 debugE msg e
@@ -55,13 +46,15 @@ debug msg = putStrLn $ "[debug.fuse   ] " ++ msg
 
 debugger :: FuseOperations a -> FuseOperations a
 debugger backend = FuseOperations { fuseGetFileStat =
-                                        \f -> do { result <- fuseGetFileStat backend f
-                                                 ; debugEither ("stat " ++ f) result
-                                                 ; return result
-                                                 }
+                                        \f a -> do { result <- fuseGetFileStat backend f a
+                                                   ; case a
+                                                     of Nothing -> debugEither ("stat " ++ f) (const "") result
+                                                        Just _  -> debugEither ("fstat " ++ f) (const "") result
+                                                   ; return result
+                                                   }
                                   , fuseReadSymbolicLink =
                                         \f -> do { result <- fuseReadSymbolicLink backend f
-                                                 ; debugEither ("readlink " ++ f) result
+                                                 ; debugEither ("readlink " ++ f) (const "") result
                                                  ; return result
                                                  }
                                   , fuseCreateDevice =
@@ -121,22 +114,26 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                      }
                                   , fuseOpen =
                                         \f a b -> do { result <- fuseOpen backend f a b
-                                                     ; debugEither ("open " ++ f) result
+                                                     ; debugEither ("open " ++ f) (const "") result
                                                      ; return result
                                                      }
                                   , fuseRead =
                                         \f a b c -> do { result <- fuseRead backend f a b c
-                                                       ; debugEither ("read " ++ f ++ " " ++ show b ++ " " ++ show c) result
+                                                       ; debugEither ("read " ++ f ++ " size=" ++ show b ++ " offset=" ++ show c)
+                                                                     (show . B.length) 
+                                                                     result
                                                        ; return result
                                                        }
                                   , fuseWrite =
                                         \f a b c -> do { result <- fuseWrite backend f a b c
-                                                       ; debugEither1 ("write " ++ f ++ " " ++ show (B.length b) ++ " " ++ show c) result
+                                                       ; debugEither ("write " ++ f ++ " size=" ++ show (B.length b) ++ " offset=" ++ show c)
+                                                                     show
+                                                                     result
                                                        ; return result
                                                        }
                                   , fuseGetFileSystemStats =
                                         \s -> do { result <- fuseGetFileSystemStats backend s
-                                                 ; debugEither ("statfs " ++ s) result
+                                                 ; debugEither ("statfs " ++ s) (const "") result
                                                  ; return result
                                                  }
                                   , fuseFlush =
@@ -149,10 +146,10 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                    ; debug ("release " ++ f)
                                                    }
                                   , fuseSynchronizeFile =
-                                        \f a -> do { result <- fuseSynchronizeFile backend f a
-                                                   ; debugE ("fsync " ++ f) result
-                                                   ; return result
-                                                   }
+                                        \f a b -> do { result <- fuseSynchronizeFile backend f a b
+                                                     ; debugE ("fsync " ++ f) result
+                                                     ; return result
+                                                     }
                                   , fuseOpenDirectory =
                                         \f -> do { result <- fuseOpenDirectory backend f
                                                  ; debugE ("opendir " ++ f) result
@@ -160,7 +157,7 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                  }
                                   , fuseReadDirectory =
                                         \f -> do { result <- fuseReadDirectory backend f
-                                                 ; debugEither2 ("readdir " ++ f) result
+                                                 ; debugEither ("readdir " ++ f) (show . map snd) result
                                                  ; return result
                                                  }
                                   , fuseReleaseDirectory =
