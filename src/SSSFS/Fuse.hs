@@ -126,7 +126,7 @@ fsRead s _ rfh pSize pOffset = readIORef rfh >>= sysread
         
         bufsz = fromIntegral pSize
         
-        sysread fh = print fh >> fmap Right (fread s fh offset bufsz)
+        sysread fh = fmap Right (fread s fh offset bufsz)
 
 fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
 fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
