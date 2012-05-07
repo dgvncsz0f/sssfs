@@ -52,7 +52,6 @@ module SSSFS.Storage
 
 import           Codec.Text.Raw
 -- import           Codec.Utils
-import           Control.Monad.IO.Class
 import qualified Data.Serialize as S
 import qualified Data.ByteString as B
 import qualified Data.Text as T

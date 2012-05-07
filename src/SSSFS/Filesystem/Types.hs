@@ -81,7 +81,6 @@ module SSSFS.Filesystem.Types
 
 import           Control.Exception
 import           Control.Applicative
-import           Control.Monad.IO.Class
 import           Data.UUID
 import           Data.UUID.V1
 import           Data.Maybe

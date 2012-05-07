@@ -78,7 +78,7 @@ def mount():
     root = "%s/root" % tmp
     fuse = mountpoint(tmp)
     map(os.mkdir, (root, fuse))
-    cmd  = (project_filepath("src/sssfs"), root, fuse)
+    cmd  = (project_filepath("dist/build/sssfs/sssfs"), root, fuse)
     rc = system(cmd)
     if (rc):
         debug("mount %s" % tmp)

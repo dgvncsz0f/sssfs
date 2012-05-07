@@ -3,5 +3,5 @@
 *.hi
 *.o
 .#*
-src/sssfs
+dist/
 README.html

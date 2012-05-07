@@ -28,13 +28,8 @@
 module SSSFS.Config
        where
 
-import Foreign.C.Types
-
 -- | Fuse ignores st_blksz for many reasons. As there wont be any
 -- buffering, for performance sake it is better to leave blockSize ==
 -- pageSize (refer to getpagesize).
 blockSize :: Int
-blockSize = fromIntegral pagesize
-
-foreign import ccall unsafe "unistd.h getpagesize"
-  pagesize :: CInt
+blockSize = 4*1024

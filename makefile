@@ -1,20 +1,19 @@
 ghc       = ghc
+cabal     = cabal
 find      = find
 env       = env
 nosetests = nosetests
 
-ghcflags  =
-noseflags =
+ghcflags             =
+noseflags            =
+cabal_configureflags =
+cabal_buildflags     =
 
 SRCFILES = $(shell $(find) ./src -type f -name \*.hs)
 SSSFS    = ./src/sssfs
 
 .PHONY: compile
 compile: $(SSSFS)
-
-.PHONY: compile
-compile-prof: ghcflags += -auto-all -caf-all -prof -rtsopts
-compile-prof: $(SSSFS)
 
 .PHONY: try
 try: tests=./try
@@ -24,10 +23,9 @@ try: compile
 .PHONY: clean
 clean:
 	rm -f $(SSSFS)
-	$(find) ./src -type f -name \*.o -exec rm -f \{\} \;
-	$(find) ./src -type f -name \*.hi -exec rm -f \{\} \;
+	$(cabal) clean
 	$(find) ./try -type f -name \*.pyc -exec rm -f \{\} \;
 
 $(SSSFS): $(SRCFILES)
-	$(ghc) -i./src -threaded --make $(ghcflags) $(SSSFS).hs
-
+	$(cabal) configure $(cabal_configureflags)
+	$(cabal) build $(cabal_buildflags)
