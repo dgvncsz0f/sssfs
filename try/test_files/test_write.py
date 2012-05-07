@@ -28,17 +28,36 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import tempfile
+import time
 import base
+import random
+from exceptions import OSError
+from nose.tools import *
+from test_files import filepath
 
-fuse_handle = None
-mountpoint  = "%s/test_files" % (tempfile.gettempdir(),)
-filepath    = base.generic_filepath(mountpoint)
+def test_write():
+    f = filepath()
+    with open(f, "w") as fh:
+        fh.write("foobar")
+    with base.posix_open(f, os.O_RDONLY) as fd:
+        assert_equals("foobar", os.read(fd, 6))
 
-def setup(self):
-    global fuse_handle
-    fuse_handle = base.generic_setup(mountpoint)
+def test_write_updates_size_field():
+    f = filepath()
+    with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
+        s = os.fstat(fd)
+        assert_equal(0, s.st_size)
+        os.write(fd, "foobar")
+        os.fsync(fd) # TODO:fix fstat
+        s = os.fstat(fd)
+        assert_equal(6, s.st_size)
 
-def teardown(self):
-    global fuse_handle
-    base.generic_teardown(fuse_handle)
+def test_write_update_mtime():
+    f = filepath()
+    with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
+        s0 = os.fstat(fd)
+        time.sleep(1)
+        os.write(fd, "foobar")
+        os.fsync(fd) # TODO:fix fstat
+        s1 = os.fstat(fd)
+        assert_less(s0.st_mtime, s1.st_mtime)

@@ -56,7 +56,7 @@ def test_mkdir_twice_should_fail():
     assert_raises(OSError, os.mkdir, d)
 
 @base.skip_on_fail
-def test_mkdir_should_update_ctime_and_mtime():
+def test_mkdir_should_update_mtime_of_its_parent():
     d = filepath()
     os.mkdir(d)
     s0 = os.stat(d)
@@ -64,14 +64,4 @@ def test_mkdir_should_update_ctime_and_mtime():
     os.mkdir(filepath(d, "1"))
     s1 = os.stat(d)
     assert_less(s0.st_mtime, s1.st_mtime)
-    assert_less(s0.st_ctime, s1.st_ctime)
 
-@base.skip_on_fail
-def test_open_should_update_atime():
-    d = filepath()
-    os.mkdir(d)
-    s0 = os.stat(d)
-    time.sleep(1)
-    os.listdir(d)
-    s1 = os.stat(d)
-    assert_less(s0.st_atime, s1.st_atime)

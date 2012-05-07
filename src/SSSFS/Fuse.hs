@@ -53,6 +53,10 @@ itypeToEntryType :: IType -> EntryType
 itypeToEntryType File        = RegularFile
 itypeToEntryType T.Directory = F.Directory
 
+epochTimeToTimestamp :: EpochTime -> Timestamp
+epochTimeToTimestamp x = (i, 0)
+  where i = read $ show x
+
 inodeToFileStat :: INode -> FileStat
 inodeToFileStat inum = FileStat { statEntryType        = itypeToEntryType (itype inum)
                                 , statFileMode         = fmode
@@ -83,7 +87,7 @@ install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
   where handlerA (NotFound _) = g eNOENT
         handlerA (NotADir _)  = g eNOTDIR
         handlerA (NotEmpty _) = g eNOTEMPTY
-        handlerA (IsDir _)   = g eISDIR
+        handlerA (IsDir _)    = g eISDIR
         
         handlerB _ = g eFAULT
 
@@ -98,26 +102,24 @@ fsMknod s path RegularFile _ _ = exToErrno (creat s path >> return ())
 fsMknod _ _ _ _ _              = return eNOSYS
 
 fsMkdir :: (StorageHashLike s) => s -> FilePath -> FileMode -> IO Errno
-fsMkdir s path _ = exToErrno f
-  where f = mkdir s path >> return ()
+fsMkdir s path _ = exToErrno $ mkdir s path >> return ()
 
 fsReadDir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO (Either Errno [(FilePath, FileStat)])
 fsReadDir s path = exToEither f
   where f = fmap (map (\(p, i) -> (p, inodeToFileStat i))) (readDir s path)
 
 fsRmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO Errno
-fsRmdir s path = exToErrno f
-  where f = rmdir s path
+fsRmdir s path = exToErrno $ rmdir s path
 
 fsStat :: (StorageHashLike s) => s -> FilePath -> Maybe FHandle -> IO (Either Errno FileStat)
 fsStat s path Nothing = exToEither (fmap inodeToFileStat (stat s path))
 fsStat s _ (Just rfh) = exToEither (fmap inodeToFileStat (readIORef rfh >>= fstat s))
 
 fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
-fsOpen s path _ _ = exToEither f
-  where f = do { fh <- open s path
-               ; newIORef fh
-               }
+fsOpen s path _ _ = exToEither $ do { fh <- open s path
+                                    ; fsync s fh
+                                    ; newIORef fh
+                                    }
 
 fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
@@ -125,37 +127,44 @@ fsInit s = do { oldfs <- S.head s keyOne
               }
 
 fsRead :: (StorageHashLike s) => s -> FilePath -> FHandle -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
-fsRead s _ rfh pSize pOffset = readIORef rfh >>= sysread
+fsRead s _ rfh pSize pOffset = exToEither $ do { (fh, blk) <- readIORef rfh >>= sysread
+                                               ; _         <- modifyIORef rfh (const fh)
+                                                -- ; fsync s fh -- TODO: this kills performance
+                                               ; return blk
+                                               }
   where offset = fromIntegral pOffset
         
         bufsz = fromIntegral pSize
         
-        sysread fh = fmap Right (fread s fh offset bufsz)
+        sysread fh = fread s fh offset bufsz
 
 fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
-fsWrite s _ rfh bytes pOffset = do { fh <- readIORef rfh >>= syswrite
-                                   ; _  <- modifyIORef rfh (const fh)
-                                   -- ; sync s fh -- TODO!
-                                   ; return (Right $ fromIntegral $ B.length bytes)
-                                   }
+fsWrite s _ rfh bytes pOffset = exToEither $ do { fh <- readIORef rfh >>= syswrite
+                                                ; _  <- modifyIORef rfh (const fh)
+                                                -- ; fsync s fh -- TODO: this kills performance
+                                                ; return (fromIntegral $ B.length bytes)
+                                                }
   where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
 
 fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
-fsTruncate s path pOffset Nothing = do { fh <- open s path
-                                       ; ftruncate s fh (fromIntegral pOffset) >>= fsync s
-                                       ; return eOK
-                                       }
-fsTruncate s _ pOffset (Just rfh) = do { fh <- readIORef rfh >>= flip (ftruncate s) (fromIntegral pOffset)
-                                       ; _  <- modifyIORef rfh (const fh)
-                                       ; sync s fh
-                                       ; return eOK
-                                       }
+fsTruncate s path pOffset Nothing = exToErrno $ do { fh <- open s path
+                                                   ; ftruncate s fh (fromIntegral pOffset) >>= fsync s
+                                                   }
+fsTruncate s _ pOffset (Just rfh) = exToErrno $ do { fh <- readIORef rfh >>= flip (ftruncate s) (fromIntegral pOffset)
+                                                   ; _  <- modifyIORef rfh (const fh)
+                                                   ; fsync s fh
+                                                   }
+
+fsUtime :: (StorageHashLike s) => s -> FilePath -> EpochTime -> EpochTime -> IO Errno
+fsUtime s path uAtime0 uMtime0 = exToErrno $ utime s path uAtime uMtime
+  where uAtime = epochTimeToTimestamp uAtime0
+        uMtime = epochTimeToTimestamp uMtime0
 
 fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
-fsFlush s _ rfh = readIORef rfh >>= fsync s >> return eOK
+fsFlush _ _ _ = return eOK
 
 fsFSync :: (StorageHashLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
-fsFSync s _ _ rfh = readIORef rfh >>= fsync s >> return eOK
+fsFSync s _ _ rfh = exToErrno $ readIORef rfh >>= fsync s
 
 fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
 fsRelease s _ rfh = readIORef rfh >>= fsync s
@@ -174,7 +183,7 @@ sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
                           , fuseSetFileMode          = \_ _ -> return eOK
                           , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
                           , fuseSetFileSize          = fsTruncate s
-                          , fuseSetFileTimes         = \_ _ _ -> return eOK
+                          , fuseSetFileTimes         = fsUtime s
                           , fuseOpen                 = fsOpen s
                           , fuseRead                 = fsRead s
                           , fuseWrite                = fsWrite s

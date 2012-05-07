@@ -46,7 +46,10 @@ def skip_on_fail(f):
         try:
             return(f(*args, **kwargs))
         except AssertionError:
-            raise(SkipTest())
+            if (cfg("noskip") is None):
+                raise(SkipTest())
+            else:
+                raise
     proxy_f.__name__ = f.__name__
     return(proxy_f)
 
@@ -134,6 +137,16 @@ def random_data(fd, size):
         written += os.write(fd, page[:size])
         size    -= len(page)
     return(written)
+
+def touch(f):
+    with posix_open(f, os.O_WRONLY | os.O_CREAT):
+        pass
+    os.utime(f, None)
+    return(os.stat(f))
+
+def truncate(f):
+    with posix_open(f, os.O_WRONLY | os.O_TRUNC | os.O_CREAT) as fd:
+        return(os.fstat(fd))
 
 @contextmanager
 def sssfs():

@@ -231,7 +231,7 @@ fromStorageUnit u = case u
 
         hashValue = computeHash v
 
-        hashKey = map ref [take 2 hashValue, take 3 $ drop 3 hashValue, hashValue]
+        hashKey = map ref [take 2 hashValue, take 3 $ drop 2 hashValue, hashValue]
 
 value :: (S.Serialize a) => a -> B.ByteString
 value = S.encode

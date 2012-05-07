@@ -33,8 +33,6 @@ import base
 from exceptions import OSError
 from nose.tools import *
 from test_files import filepath
-from test_files import truncate
-from test_files import touch
 
 def test_open_rdonly_should_raise_exception_when_file_does_not_exist():
     f = filepath()
@@ -42,7 +40,7 @@ def test_open_rdonly_should_raise_exception_when_file_does_not_exist():
 
 def test_open_rdonly_should_not_allow_writing():
     f = filepath()
-    touch(f)
+    base.touch(f)
     with base.posix_open(f, os.O_RDONLY) as fd:
         assert_raises(OSError, os.write, fd, "foobar")
 
@@ -55,26 +53,23 @@ def test_open_truncate_set_size_to_zero():
     with open(f, "w") as fh:
         fh.write("foobar")
     assert_greater(os.stat(f).st_size, 0)
-    with base.posix_open(f, os.O_RDWR | os.O_TRUNC) as fd:
+    with base.posix_open(f, os.O_RDWR | os.O_TRUNC):
         pass
     assert_equals(os.stat(f).st_size, 0)
 
-@base.skip_on_fail
 def test_open_update_atime():
     f  = filepath()
-    s0 = touch(f)
+    s0 = base.touch(f)
     time.sleep(1)
-    with base.posix_open(f, os.O_RDONLY) as fd:
-        pass
-    s1 = os.stat(f)
+    s1 = base.touch(f)
     assert_less(s0.st_atime, s1.st_atime)
 
 @base.skip_on_fail
-def test_open_update_ctime():
-    f  = filepath()
-    s0 = touch(f)
+def test_open_update_mtime_of_its_parent_dir():
+    d = filepath()
+    os.mkdir(d)
+    s0 = os.stat(d)
     time.sleep(1)
-    with base.posix_open(f, os.O_RDONLY) as fd:
-        pass
-    s1 = os.stat(f)
-    assert_less(s0.st_ctime, s1.st_ctime)
+    base.touch(filepath(d, "1"))
+    s1 = os.stat(d)
+    assert_less(s0.st_mtime, s1.st_mtime)
