@@ -29,5 +29,5 @@ executable sssfs
 
 source-repository head
   type:     git
-  location: git@github.com:dsouza/sssfs.git
+  location: git://github.com/dsouza/sssfs.git
 
