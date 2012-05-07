@@ -36,6 +36,7 @@ module SSSFS.Filesystem.Types
        , INode(..)
        , StorageUnit(..)
        , IType(..)
+       , Blocks
        , Block
        , BlockSeek
        , BlockIx
@@ -109,6 +110,8 @@ type Size = Int
 
 type BlockIx = Int
 
+type Blocks = M.Map Int DataBlock
+
 -- | Arbirtrary information held as a key-value pair
 type Metadata = [(B.ByteString, B.ByteString)]
 
@@ -133,7 +136,7 @@ data INode = INode { inode  :: OID                 -- ^ Unique id of this inode
                    , meta   :: Metadata            -- ^ Arbitrary metadata information
                    , blksz  :: Int                 -- ^ Fixed size of each datablock
                    , size   :: Integer             -- ^ Size of this file in bytes
-                   , blocks :: M.Map Int DataBlock -- ^ The actual file contents
+                   , blocks :: Blocks              -- ^ The actual file contents
                    }
            deriving (Eq,Show)
 
