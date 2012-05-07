@@ -77,8 +77,6 @@ module SSSFS.Filesystem.Types
        , inodeToINodePtrUnit
        , inodeToDirEntUnit
        , inodeUnitToINode
-         -- | IO
-       , enumINode
        ) where
 
 import           Control.Exception
@@ -92,7 +90,6 @@ import qualified Data.ByteString.Lazy as L
 import qualified Data.Text as T
 import qualified Data.Map as M
 import           Data.Text.Encoding
-import           Data.IterIO
 import qualified Data.Serialize as S
 import           System.Posix.Clock
 import           SSSFS.Config
@@ -292,14 +289,6 @@ inodeUnitToINode _               = Nothing
 
 inodeToINodePtrUnit :: INode -> Key -> StorageUnit
 inodeToINodePtrUnit i l = INodePtrUnit (inode i) l
-
-enumBlocks :: (MonadIO m, StorageHashLike s) => s -> [DataBlock] -> Onum B.ByteString m ()
-enumBlocks _ []     = enumPure B.empty
-enumBlocks s [b]    = enumKey s (addr b)
-enumBlocks s (b:bs) = enumKey s (addr b) `lcat` (enumBlocks s bs)
-
-enumINode :: (MonadIO m, StorageHashLike s) => s -> INode -> Onum B.ByteString m ()
-enumINode s = enumBlocks s . M.elems . blocks
 
 ensureDirectory :: FilePath -> INode -> INode
 ensureDirectory path inum

@@ -44,8 +44,8 @@ module SSSFS.Storage
        , showRefS
        , showKey
        , showKeyS
-         -- | Iteratee
-       , enumKey
+       --   -- | Iteratee
+       -- , enumKey
          -- | Misc
        , computeHash
        ) where
@@ -53,7 +53,6 @@ module SSSFS.Storage
 import           Codec.Text.Raw
 -- import           Codec.Utils
 import           Control.Monad.IO.Class
-import           Data.IterIO
 import qualified Data.Serialize as S
 import qualified Data.ByteString as B
 import qualified Data.Text as T
@@ -123,10 +122,6 @@ class StorageEnumLike s where
 class (StorageHashLike s, StorageEnumLike s) => StorageContext s r where
   
   enum :: s -> Key -> IO r
-
--- | Provides an enumerator for the contents of a given key.
-enumKey :: (MonadIO m, StorageHashLike s) => s -> Key -> Onum B.ByteString m ()
-enumKey s l = mkInumC id noCtl (liftIO $ get s l)
 
 -- | Currently computes the sha1 of a given bytestring.
 computeHash :: B.ByteString -> String

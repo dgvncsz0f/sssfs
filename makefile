@@ -3,14 +3,18 @@ find      = find
 env       = env
 nosetests = nosetests
 
-ghcflags  = -W -Wall -O2 -threaded -i./src
-noseflags = 
+ghcflags  =
+noseflags =
 
 SRCFILES = $(shell $(find) ./src -type f -name \*.hs)
 SSSFS    = ./src/sssfs
 
 .PHONY: compile
 compile: $(SSSFS)
+
+.PHONY: compile
+compile-prof: ghcflags += -auto-all -caf-all -prof -rtsopts
+compile-prof: $(SSSFS)
 
 .PHONY: try
 try: tests=./try
@@ -25,5 +29,5 @@ clean:
 	$(find) ./try -type f -name \*.pyc -exec rm -f \{\} \;
 
 $(SSSFS): $(SRCFILES)
-	$(ghc) $(ghcflags) --make $(SSSFS).hs
+	$(ghc) -i./src -threaded --make $(ghcflags) $(SSSFS).hs
 
