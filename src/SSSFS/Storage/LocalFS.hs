@@ -27,12 +27,12 @@
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
--- | This module provides a very simple in-memory implementation of a
--- backend. You generally don't want to use this, except perhaps for
--- testing purposes.
--- TODO: handle exceptions properly
-module SSSFS.Storage.Local
-       ( new
+-- | This module provides a very simple implementation using the local
+-- filesystem. You generally don't want to use this, except perhaps
+-- for testing purposes.
+module SSSFS.Storage.LocalFS
+       ( LocalStorage()
+       , new
        ) where
 
 import           Control.Exception as C
@@ -49,20 +49,23 @@ import           SSSFS.Storage
 newtype LocalStorage = LocalStorage FilePath
 
 maxSize :: Int
-maxSize = 8 * 1024 * 1024
+maxSize = 1 * 1024 * 1024
 
 new :: FilePath -> LocalStorage
 new = LocalStorage
 
 -- | Relies on POSIX guarantees that a move operation in the same
 -- partition is atomic. You better be using a local filesystem.
-atomicWrite :: FilePath -> B.ByteString -> IO ()
-atomicWrite dst contents = let dir = takeDirectory dst
-                           in do { (tmpF, tmpH) <- openBinaryTempFile dir ".localstorage.XXXX"
-                                 ; B.hPut tmpH contents
-                                 ; hClose tmpH
-                                 ; renameFile tmpF dst
-                                 }
+atomicWrite :: FilePath -> Maybe B.ByteString -> IO ()
+atomicWrite dst mcontents = let dir = takeDirectory dst
+                            in do { (tmpF, tmpH) <- openBinaryTempFile dir ".localstorage.XXXX"
+                                  ; case mcontents
+                                    of Nothing
+                                         -> hClose tmpH
+                                       Just contents
+                                         -> B.hPut tmpH contents >> hClose tmpH
+                                  ; renameFile tmpF dst
+                                  }
 
 -- unsafeWrite :: FilePath -> B.ByteString -> IO ()
 -- unsafeWrite dst contents = do { fh <- openBinaryFile dst WriteMode
@@ -98,24 +101,49 @@ chroot root l f
 chroot_ :: FilePath -> Key -> FilePath
 chroot_ root l = chroot root l encodePath
 
+putFile :: FilePath -> Maybe B.ByteString -> IO ()
+putFile f v = let dir = takeDirectory f
+              in do { createDirectoryIfMissing True dir
+                    ; atomicWrite f v
+                    }
+
+dataKey :: Key -> Key
+dataKey = (fromStr "data" ++)
+
+indexKey :: Key -> Key
+indexKey = (fromStr "indx" ++)
+
+instance Storage LocalStorage
+
 instance StorageHashLike LocalStorage where
   
-  put (LocalStorage root) k v = do { createDirectoryIfMissing True (chroot root k encodePathDir)
-                                   ; atomicWrite (chroot_ root k) v
-                                   }
+  put (LocalStorage root) k0 v = let k = dataKey k0
+                                 in putFile (chroot_ root k) (Just v)
   
-  get (LocalStorage root) k = C.catch (readContent (chroot_ root k))
-                                      (\e -> if (isDoesNotExistError e)
-                                             then (throw $ NotFound (showKeyS k))
-                                             else ioError e)
+  get (LocalStorage root) k0 = let k = dataKey k0
+                               in C.catch (readContent (chroot_ root k))
+                                  (\e -> if (isDoesNotExistError e)
+                                         then (throw $ NotFound (showKeyS k))
+                                         else ioError e)
   
-  del (LocalStorage root) k = removeFile (chroot_ root k)
+  del (LocalStorage root) k0 = let k = dataKey k0
+                               in removeFile (chroot_ root k)
   
-  head (LocalStorage root) k = doesFileExist (chroot_ root k)
+  head (LocalStorage root) k0 = let k = dataKey k0
+                                in doesFileExist (chroot_ root k)
   
 instance StorageEnumLike LocalStorage where
   
-  enumKeys (LocalStorage root) k = let path       = chroot root k encodePathDir
-                                       decode     = map (ref . decodePath)
-                                       filterList = filter ("f" `isPrefixOf`)
-                                   in fmap (decode . filterList) (getDirectoryContents path)
+  index (LocalStorage root) k0 v  = let k = indexKey k0
+                                    in putFile (chroot_ root (k ++ [v])) Nothing
+  unindex (LocalStorage root) k0 v = let k = indexKey k0
+                                     in removeFile (chroot_ root (k ++ [v]))
+  
+  enumKeys (LocalStorage root) k0 = let k          = indexKey k0
+                                        path       = chroot root k encodePathDir
+                                        decode     = map (ref . decodePath)
+                                        filterList = filter ("f" `isPrefixOf`)
+                                    in C.catch (fmap (decode . filterList) (getDirectoryContents path))
+                                       (\e -> if (isDoesNotExistError e)
+                                              then return []
+                                              else ioError e)

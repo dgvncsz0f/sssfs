@@ -26,7 +26,8 @@
 
 
 module SSSFS.Storage.Debug
-       ( new
+       ( DebugStorage()
+       , new
        ) where
 
 import qualified Data.ByteString as B
@@ -45,6 +46,10 @@ debugValue bytes  = show (B.length bytes) ++ " bytes"
 
 debugValues :: Show a => [a] -> String
 debugValues xs  = show (length xs) ++ " elements"
+
+instance (Storage s) => Storage (DebugStorage s) where
+  
+  shutdown (DebugStorage s) = shutdown s >> debug "shutdown"
 
 instance (StorageHashLike s) => StorageHashLike (DebugStorage s) where
   
@@ -71,6 +76,16 @@ instance (StorageHashLike s) => StorageHashLike (DebugStorage s) where
        }
 
 instance (StorageEnumLike s) => StorageEnumLike (DebugStorage s) where
+  
+  index (DebugStorage s) k r =
+    do { index s k r
+       ; debug ("index " ++ showKeyS k ++ " " ++ showRefS r)
+       }
+  
+  unindex (DebugStorage s) k r =
+    do { unindex s k r
+       ; debug ("unindex " ++ showKeyS k ++ " " ++ showRefS r)
+       }
   
   enumKeys (DebugStorage s) k =
     do { vs <- enumKeys s k

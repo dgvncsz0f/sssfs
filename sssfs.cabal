@@ -13,19 +13,23 @@ executable sssfs
   main-is:         sssfs.hs
   ghc-options:     -threaded -W -Wall
   hs-source-dirs:  src
-  build-depends:     base         >=4
-                   , HFuse        >=0.2.4
-                   , pretty       >=1.0.1.2
-                   , Crypto       >=4.2.3
-                   , text         >=0.11.1.5
-                   , bytestring   >=0.9.1.10
-                   , cereal       >=0.3.4.0
-                   , filepath     >=1.2.0.0
-                   , directory    >=1.1.0.0
-                   , clock        >=0.2.0.0
-                   , containers   >=0.4.0.0
-                   , uuid         >=1.2.3
-                   , unix         >=2.4.2.0
+  include-dirs:    /usr/include, /usr/local/include, ./lib
+  extra-libraries: db
+  c-sources:       ./lib/bdb_storage.c
+  cc-options:      -W -Wall
+  build-depends:   base         >=4
+                 , HFuse        >=0.2.4
+                 , pretty       >=1.0.1.2
+                 , Crypto       >=4.2.3
+                 , text         >=0.11.1.5
+                 , bytestring   >=0.9.1.10
+                 , cereal       >=0.3.4.0
+                 , filepath     >=1.2.0.0
+                 , directory    >=1.1.0.0
+                 , clock        >=0.2.0.0
+                 , containers   >=0.4.0.0
+                 , uuid         >=1.2.3
+                 , unix         >=2.4.2.0
 
 executable sssfs_stat
   main-is:         sssfs_stat.hs

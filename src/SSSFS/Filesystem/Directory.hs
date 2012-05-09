@@ -38,7 +38,7 @@ import SSSFS.Except
 import SSSFS.Filesystem.Core
 import SSSFS.Filesystem.Types
 
-mkdir :: (StorageHashLike s) => s -> FilePath -> IO INode
+mkdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO INode
 mkdir s path = mknod s path Directory
 
 rmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
@@ -50,7 +50,7 @@ rmdir s path = do { empty <- fmap not (enumDir s path)
 
 enumDir :: (StorageContext s r) => s -> FilePath -> IO r
 enumDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)
-                    ; enum s (fromOID $ inode inum)
+                    ; enum s (iFromINode inum)
                     }
 
 -- | Returns the contents of a given directory

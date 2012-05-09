@@ -31,7 +31,8 @@ import           System.Console.GetOpt
 import           System.Environment
 import           SSSFS.Fuse
 import           SSSFS.Fuse.Debug
-import qualified SSSFS.Storage.Local as L
+import qualified SSSFS.Storage.Bdb as B
+import qualified SSSFS.Storage.LocalFS as L
 import qualified SSSFS.Storage.Debug as D
 
 data Options = Options { rootdir     :: String
@@ -68,17 +69,19 @@ sssfsOptions prg argv = case (getOpt Permute options argv)
   where header = "Usage: "++ prg ++" [OPTIONS...] rootdir mountpoint"
 
 main :: IO ()
-main = do { prg  <- getProgName
+main = do { prg   <- getProgName
           ; mopts <- fmap (sssfsOptions prg) getArgs
           ; case mopts
             of Left err
                  -> error err
                Right opts
-                 -> withArgs (fuseOpts opts) $ exec (storage opts) (fuseDbg opts)
+                 -> do { s <- B.new $ rootdir opts
+                       ; withArgs (fuseOpts opts) $ exec (storage s opts) (fuseDbg opts)
+                       }
           }
-  where storage opts
-           | optDebug opts = Left $ D.new $ L.new $ rootdir opts
-           | otherwise     = Right $ L.new $ rootdir opts
+  where storage s opts
+           | optDebug opts = Left $ D.new s
+           | otherwise     = Right $ s
         
         fuseDbg opts
           | optDebug opts = debugger

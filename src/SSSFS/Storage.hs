@@ -34,6 +34,7 @@ module SSSFS.Storage
          Ref(..)
        , Key
        , Payload
+       , Storage(..)
        , StorageHashLike(..)
        , StorageEnumLike(..)
        , StorageContext(..)
@@ -44,21 +45,15 @@ module SSSFS.Storage
        , showRefS
        , showKey
        , showKeyS
+       , readKeyS
        --   -- | Iteratee
        -- , enumKey
-         -- | Misc
-       , computeHash
        ) where
 
-import           Codec.Text.Raw
--- import           Codec.Utils
 import qualified Data.Serialize as S
 import qualified Data.ByteString as B
 import qualified Data.Text as T
 import           Data.Text.Encoding
--- import           Data.Digest.SHA1 as SHA1
-import           Data.Digest.SHA256 as SHA256
-import           Text.PrettyPrint.HughesPJ (render)
 import           GHC.Exts
 
 newtype Ref   = Ref { showRef :: T.Text }
@@ -68,11 +63,19 @@ type Key      = [Ref]
 
 type Payload  = B.ByteString
 
+split :: Char -> String -> [String]
+split _ [] = []
+split c s  = let (left,right) = break (==c) s
+             in left : split c right
+
 showKey :: Key -> T.Text
 showKey = ("/" `T.append`) . T.intercalate "/" . map showRef
 
 showKeyS :: Key -> String
 showKeyS = T.unpack . showKey
+
+readKeyS :: String -> Key
+readKeyS = map ref . split '/'
 
 showRefS :: Ref -> String
 showRefS = T.unpack . showRef
@@ -86,7 +89,13 @@ fromRef = (:[])
 fromStr :: String -> Key
 fromStr = (:[]) . ref
 
-class StorageHashLike s where
+class Storage s where
+  
+  -- | Allows the storage to safely terminate.
+  shutdown :: s -> IO ()
+  shutdown _ = return ()
+
+class (Storage s) => StorageHashLike s where
   
   -- | Writes content and makes it available under a given location.
   put  :: s -> Key -> Payload -> IO ()
@@ -101,15 +110,12 @@ class StorageHashLike s where
   -- | Checks whether or a not a given resource is available.
   head :: s -> Key -> IO Bool
   
-class StorageEnumLike s where
-  -- | Enumerates all locations that are proper prefixes of a given
-  -- location. If you consider locations hierarchically, then a proper
-  -- prefix will be the all of its proper children. For instance:
-  -- 
-  -- Suppose [foo,bar,baz] and [foo,baz,bar] are both defined, then
-  -- enum [foo] = [bar,baz].
-  -- 
-  -- There is no well defined ordering for the results.
+class (Storage s) => StorageEnumLike s where
+  
+  index :: s -> Key -> Ref -> IO ()
+  
+  unindex :: s -> Key -> Ref -> IO ()
+  
   enumKeys :: s -> Key -> IO [Ref]
   
   enumCount :: s -> Key -> IO Int
@@ -118,15 +124,9 @@ class StorageEnumLike s where
   enumTest :: s -> Key -> IO Bool
   enumTest s k = fmap (not . null) (enumKeys s k)
 
-class (StorageHashLike s, StorageEnumLike s) => StorageContext s r where
+class (Storage s, StorageHashLike s, StorageEnumLike s) => StorageContext s r where
   
   enum :: s -> Key -> IO r
-
--- | Currently computes the sha1 of a given bytestring.
-computeHash :: B.ByteString -> String
-computeHash = render . hexdumpBy "" 64 . shasum . B.unpack
-  where -- shasum = toOctets 256 . SHA1.toInteger . SHA1.hash
-        shasum = SHA256.hash
 
 instance IsString Ref where
   fromString = Ref . T.pack

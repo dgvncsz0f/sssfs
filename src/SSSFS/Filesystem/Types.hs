@@ -32,11 +32,11 @@ module SSSFS.Filesystem.Types
          OID
        , Timestamp
        , Metadata
+       , Blocks
        , DataBlock(..)
        , INode(..)
        , StorageUnit(..)
        , IType(..)
-       , Blocks
        , Block
        , BlockSeek
        , BlockIx
@@ -61,23 +61,24 @@ module SSSFS.Filesystem.Types
        , toList
          -- | Unique IDs
        , newid
+       , oidZero
+       , keyZero
        , oidOne
        , keyOne
-       , keyZero
          -- | Date/Time Functions
        , now
          -- | StorageUnit Functions
-       , emptyBlock
-       , fromOID
+       , dFromOID
+       , iFromOID
+       , iFromINode
        , fromStorageUnit
        , fromLinkName
        , value
        , eulav
        , eulavM
-       , inodeToINodeUnit
-       , inodeToINodePtrUnit
+       , inodeToUnit
        , inodeToDirEntUnit
-       , inodeUnitToINode
+       , unitToINode
        ) where
 
 import           Control.Exception
@@ -86,7 +87,7 @@ import           Data.UUID
 import           Data.UUID.V1
 import           Data.Maybe
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
 import qualified Data.Map as M
 import           Data.Text.Encoding
@@ -140,22 +141,24 @@ data INode = INode { inode  :: OID                 -- ^ Unique id of this inode
                    }
            deriving (Eq,Show)
 
-data StorageUnit = INodeUnit Metadata Metadata
-                 | DataBlockUnit B.ByteString
-                 | INodePtrUnit OID Key
+data StorageUnit = INodeUnit OID Metadata Metadata
+                 | DataBlockUnit OID B.ByteString
                  | DirEntUnit String OID
 
 newid :: IO OID
-newid = fmap (B.concat . L.toChunks . toByteString . fromJust) nextUUID
+newid = fmap (B8.pack . toString . fromJust) nextUUID
 
 oidOne :: OID
-oidOne = B.pack [1]
+oidOne = B8.pack "1"
+
+oidZero :: OID
+oidZero = B8.pack "0"
 
 keyOne :: Key
-keyOne = fromOID oidOne
+keyOne = fromStr "i" ++ fromOID oidOne
 
-emptyBlock :: StorageUnit
-emptyBlock = DataBlockUnit B.empty
+keyZero :: Key
+keyZero = fromStr "d" ++ fromOID oidZero
 
 getBlock :: INode -> BlockIx -> Maybe DataBlock
 getBlock inum ix = M.lookup ix (blocks inum)
@@ -173,10 +176,6 @@ truncateI inum newSz = updateSize $ inum { blocks = uBlocks }
 updateSize :: INode -> INode
 updateSize inum = inum { size = M.fold (\a b -> szI a + b) 0 (blocks inum) }
   where szI = fromIntegral . sz
-
-keyZero :: Key
-keyZero = v
-  where Left v = fromStorageUnit emptyBlock
 
 now :: IO Timestamp
 now = do { t <- getTime Realtime
@@ -211,26 +210,28 @@ toList :: Metadata -> [(T.Text, T.Text)]
 toList = map decodePair
 
 fromOID :: OID -> Key
-fromOID o = fromStr "i" ++ (fromStr $ computeHash o)
+fromOID o = fromStr (B8.unpack o)
+
+dFromOID :: OID -> Key
+dFromOID = (fromStr "d" ++) . fromOID
+
+iFromOID :: OID -> Key
+iFromOID = (fromStr "i" ++) . fromOID
+
+iFromINode :: INode -> Key
+iFromINode = (fromStr "i" ++) . fromOID . inode
 
 fromLinkName :: OID -> String -> Key
-fromLinkName o n = fromOID o ++ fromStr n
+fromLinkName o n = iFromOID o ++ fromStr n
 
 fromStorageUnit :: StorageUnit -> Either Key (OID -> Key)
 fromStorageUnit u = case u
-        of INodeUnit _ _
-             -> Left $ fromStr "d" ++ hashKey
-           DataBlockUnit _
-             -> Left $ fromStr "d" ++ hashKey
-           INodePtrUnit o _
-             -> Left $ fromOID o
+        of INodeUnit o _ _
+             -> Left $ iFromOID o
+           DataBlockUnit o _
+             -> Left $ dFromOID o
            DirEntUnit n _
              -> Right $ \o -> fromLinkName o n
-  where v  = value u
-
-        hashValue = computeHash v
-
-        hashKey = map ref [take 2 hashValue, take 3 $ drop 2 hashValue, hashValue]
 
 value :: (S.Serialize a) => a -> B.ByteString
 value = S.encode
@@ -260,37 +261,34 @@ mkINode moid ftype = do { time  <- now
                                          }
                        }
 
+inodeToUnit :: INode -> StorageUnit
+inodeToUnit i = let core = [ (encode "inode", inode i)
+                           , (encode "itype", value (itype i))
+                           , (encode "atime", value (atime i))
+                           , (encode "ctime", value (ctime i))
+                           , (encode "mtime", value (mtime i))
+                           , (encode "blksz", value (blksz i))
+                           , (encode "size", value (size i))
+                           , (encode "blocks", value (M.toList $ blocks i))
+                           ]
+                    user = meta i
+                in INodeUnit (inode i) core user
+
 inodeToDirEntUnit :: String -> INode -> StorageUnit
 inodeToDirEntUnit n i = DirEntUnit n (inode i)
 
-inodeToINodeUnit :: INode -> StorageUnit
-inodeToINodeUnit i = let core = [ (encode "inode", inode i)
-                                , (encode "itype", value (itype i))
-                                , (encode "atime", value (atime i))
-                                , (encode "ctime", value (ctime i))
-                                , (encode "mtime", value (mtime i))
-                                , (encode "blksz", value (blksz i))
-                                , (encode "size", value (size i))
-                                , (encode "blocks", value (M.toList $ blocks i))
-                                ]
-                         user = meta i
-                     in INodeUnit core user
-
-inodeUnitToINode :: StorageUnit -> Maybe INode
-inodeUnitToINode (INodeUnit c u) = INode <$> (lookup "inode" core)
-                                         <*> (lookup "itype" core >>= eulavM)
-                                         <*> (lookup "atime" core >>= eulavM)
-                                         <*> (lookup "ctime" core >>= eulavM)
-                                         <*> (lookup "mtime" core >>= eulavM)
-                                         <*> (Just u)
-                                         <*> (lookup "blksz" core >>= eulavM)
-                                         <*> (lookup "size" core >>= eulavM)
-                                         <*> (lookup "blocks" core >>= fmap M.fromList . eulavM)
+unitToINode :: StorageUnit -> Maybe INode
+unitToINode (INodeUnit _ c u) = INode <$> (lookup "inode" core)
+                                      <*> (lookup "itype" core >>= eulavM)
+                                      <*> (lookup "atime" core >>= eulavM)
+                                      <*> (lookup "ctime" core >>= eulavM)
+                                      <*> (lookup "mtime" core >>= eulavM)
+                                      <*> (Just u)
+                                      <*> (lookup "blksz" core >>= eulavM)
+                                      <*> (lookup "size" core >>= eulavM)
+                                      <*> (lookup "blocks" core >>= fmap M.fromList . eulavM)
   where core = map (\(k,v) -> (decode k, v)) c
-inodeUnitToINode _               = Nothing
-
-inodeToINodePtrUnit :: INode -> Key -> StorageUnit
-inodeToINodePtrUnit i l = INodePtrUnit (inode i) l
+unitToINode _               = Nothing
 
 ensureDirectory :: FilePath -> INode -> INode
 ensureDirectory path inum
@@ -323,22 +321,19 @@ instance S.Serialize DataBlock where
            }
 
 instance S.Serialize StorageUnit where
-  put (INodeUnit c u) = 
+  put (INodeUnit o c u) = 
     do { S.putWord8 0
+       ; S.put o
        ; S.put c
        ; S.put u
        }
-  put (DataBlockUnit raw) =
+  put (DataBlockUnit o raw) =
     do { S.putWord8 1
+       ; S.put o
        ; S.put raw
        }
-  put (INodePtrUnit oid l) =
-    do { S.putWord8 2
-       ; S.put oid
-       ; S.put l
-       }
   put (DirEntUnit name oid) =
-    do { S.putWord8 3
+    do { S.putWord8 2
        ; S.put name
        ; S.put oid
        }
@@ -346,9 +341,8 @@ instance S.Serialize StorageUnit where
   get = 
     do { opcode <- S.getWord8
        ; case opcode 
-         of 0 -> liftA2 INodeUnit S.get S.get
-            1 -> liftA DataBlockUnit S.get
-            2 -> liftA2 INodePtrUnit S.get S.get
-            3 -> liftA2 DirEntUnit S.get S.get
+         of 0 -> liftA3 INodeUnit S.get S.get S.get
+            1 -> liftA2 DataBlockUnit S.get S.get
+            2 -> liftA2 DirEntUnit S.get S.get
             _ -> fail "unknown opcode"
        }

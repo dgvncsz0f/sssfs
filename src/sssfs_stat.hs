@@ -52,18 +52,15 @@ main = do { f        <- fmap head getArgs
         render []         = return ()
         render ((a,b):xs) = putStrLn (a ++ ": " ++ b) >> render xs
     
-        decodeUnit (DataBlockUnit _)   = [ ("type", "datablock")
-                                         ]
-        decodeUnit (INodePtrUnit o k)  = [ ("type", "inodeptr")
-                                         , ("oid", showKeyS $ fromOID o)
-                                         , ("key", showKeyS k)
+        decodeUnit (DataBlockUnit o _) = [ ("type", "datablock")
+                                         , ("oid", showKeyS $ dFromOID o)
                                          ]
         decodeUnit (DirEntUnit n o)    = [ ("type", "dirent")
                                          , ("name", n)
-                                         , ("oid", showKeyS $ fromOID o)
+                                         , ("oid", showKeyS $ iFromOID o)
                                          ]
-        decodeUnit u@(INodeUnit _ _)   = [ ("type", "inode")
-                                         , ("inode", showKeyS $ fromOID $ inode inum)
+        decodeUnit u@(INodeUnit _ _ _) = [ ("type", "inode")
+                                         , ("inode", showKeyS $ iFromOID $ inode inum)
                                          , ("itype", show (itype inum))
                                          , ("atime", show (atime inum))
                                          , ("mtime", show (mtime inum))
@@ -72,5 +69,5 @@ main = do { f        <- fmap head getArgs
                                          , ("size", show (size inum))
                                          , ("blocks", showBlocks (blocks inum))
                                          ]
-          where inum = fromJust (inodeUnitToINode u)
+          where inum = fromJust (unitToINode u)
                 

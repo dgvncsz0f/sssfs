@@ -39,6 +39,7 @@ data CFSExcept = forall e. Exception e => CFSExcept e
                deriving (Typeable)
 
 data SysExcept = DataCorruptionExcept String
+               | SysExcept String
                deriving (Show, Typeable)
 
 data IOExcept = NotFound String
