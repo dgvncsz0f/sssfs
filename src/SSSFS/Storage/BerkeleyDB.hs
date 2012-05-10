@@ -29,20 +29,17 @@
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-module SSSFS.Storage.Bdb
+module SSSFS.Storage.BerkeleyDB
        ( BdbStorage()
-       , SSSFS.Storage.Bdb.new
+       , new
        ) where
 
 import           Control.Exception
-import           Foreign
+import           Foreign hiding (new)
 import           Foreign.C
 import qualified Data.ByteString as B
-import           System.FilePath
-import           System.Directory
 import           SSSFS.Except
 import           SSSFS.Storage
-import qualified SSSFS.Storage.LocalFS as L
 
 data CStorage
 type CStoragePtr = Ptr CStorage
@@ -51,10 +48,8 @@ data Result = ROk
             | RError
             | Rc Int
             deriving (Eq)
-data BdbStorage = BdbStorage { unPtr   :: CStoragePtr 
-                             , indexer :: L.LocalStorage
-                             }
 
+data BdbStorage = BdbStorage { unPtr :: CStoragePtr }
 
 withStorage :: BdbStorage -> (CStoragePtr -> IO CInt) -> IO Result
 withStorage s f = f (unPtr s) >>= checkRc
@@ -76,17 +71,8 @@ failure = throw (SysExcept "system failure")
 notFound :: String -> a
 notFound = throw . NotFound
 
-envDir :: FilePath -> FilePath
-envDir = (</> "env")
-
-idxDir :: FilePath -> FilePath
-idxDir = (</> "idx")
-
 new :: FilePath -> IO BdbStorage
-new file = do { createDirectoryIfMissing True (envDir file)
-              ; withCString (envDir file) $ \cstr -> fmap mkStorage (cstorage_init cstr)
-              }
-  where mkStorage ptr = BdbStorage ptr (L.new (idxDir file))
+new file = withCString file $ \cstr -> fmap BdbStorage (cstorage_init cstr)
 
 destroy :: BdbStorage -> IO ()
 destroy = cstorage_destroy . unPtr
@@ -104,14 +90,6 @@ instance StorageHashLike BdbStorage where
   del s k = hstorage_del s (showKeyS k)
   
   get s k = hstorage_get s (showKeyS k)
-
-instance StorageEnumLike BdbStorage where
-  
-  index s k v = index (indexer s) k v
-  
-  unindex s k v = unindex (indexer s) k v
-  
-  enumKeys s k = enumKeys (indexer s) k
 
 foreign import ccall safe "bdb_storage.h storage_init"
   cstorage_init :: CString -> IO CStoragePtr

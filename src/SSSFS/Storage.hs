@@ -112,10 +112,6 @@ class (Storage s) => StorageHashLike s where
   
 class (Storage s) => StorageEnumLike s where
   
-  index :: s -> Key -> Ref -> IO ()
-  
-  unindex :: s -> Key -> Ref -> IO ()
-  
   enumKeys :: s -> Key -> IO [Ref]
   
   enumCount :: s -> Key -> IO Int

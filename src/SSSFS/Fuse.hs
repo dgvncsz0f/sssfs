@@ -97,11 +97,11 @@ exToEither f = install (fmap Right f) (return . Left)
 exToErrno :: IO () -> IO Errno
 exToErrno f = install (f >> return eOK) (return)
 
-fsMknod :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
+fsMknod :: (StorageHashLike s) => s -> FilePath -> EntryType -> FileMode -> DeviceID -> IO Errno
 fsMknod s path RegularFile _ _ = exToErrno (creat s path >> return ())
 fsMknod _ _ _ _ _              = return eNOSYS
 
-fsMkdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> FileMode -> IO Errno
+fsMkdir :: (StorageHashLike s) => s -> FilePath -> FileMode -> IO Errno
 fsMkdir s path _ = exToErrno $ mkdir s path >> return ()
 
 fsReadDir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO (Either Errno [(FilePath, FileStat)])
@@ -115,13 +115,13 @@ fsStat :: (StorageHashLike s) => s -> FilePath -> Maybe FHandle -> IO (Either Er
 fsStat s path Nothing = exToEither (fmap inodeToFileStat (stat s path))
 fsStat s _ (Just rfh) = exToEither (fmap inodeToFileStat (readIORef rfh >>= fstat s))
 
-fsOpen :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
+fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
 fsOpen s path _ _ = exToEither $ do { fh <- open s path
                                     ; fsync s fh
                                     ; newIORef fh
                                     }
 
-fsInit :: (StorageHashLike s, StorageEnumLike s) => s -> IO ()
+fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
               ; when (not oldfs) (mkfs s)
               }
@@ -134,7 +134,7 @@ fsRead s _ rfh pSize pOffset = exToEither $ readIORef rfh >>= sysread
         
         sysread fh = fmap snd (fread s fh offset bufsz)
 
-fsWrite :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
+fsWrite :: (StorageHashLike s) => s -> FilePath -> FHandle -> B.ByteString -> FileOffset -> IO (Either Errno ByteCount)
 fsWrite s _ rfh bytes pOffset = exToEither $ do { fh <- readIORef rfh >>= syswrite
                                                 ; _  <- modifyIORef rfh (const fh)
                                                 -- ; fsync s fh
@@ -142,7 +142,7 @@ fsWrite s _ rfh bytes pOffset = exToEither $ do { fh <- readIORef rfh >>= syswri
                                                 }
   where syswrite fh = fwrite s fh bytes (fromIntegral pOffset)
 
-fsTruncate :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
+fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
 fsTruncate s path pOffset Nothing = exToErrno $ do { fh <- open s path
                                                    ; ftruncate s fh (fromIntegral pOffset) >>= fsync s
                                                    }
@@ -151,18 +151,21 @@ fsTruncate s _ pOffset (Just rfh) = exToErrno $ do { fh <- readIORef rfh >>= fli
                                                    ; fsync s fh
                                                    }
 
-fsUtime :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> EpochTime -> EpochTime -> IO Errno
+fsUtime :: (StorageHashLike s) => s -> FilePath -> EpochTime -> EpochTime -> IO Errno
 fsUtime s path uAtime0 uMtime0 = exToErrno $ utime s path uAtime uMtime
   where uAtime = epochTimeToTimestamp uAtime0
         uMtime = epochTimeToTimestamp uMtime0
 
+fsUnlink :: (StorageHashLike s) => s -> FilePath -> IO Errno
+fsUnlink s path = exToErrno $ unlink s path
+
 fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
 fsFlush _ _ _ = return eOK
 
-fsFSync :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
+fsFSync :: (StorageHashLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
 fsFSync s _ _ rfh = exToErrno $ readIORef rfh >>= fsync s
 
-fsRelease :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> FHandle -> IO ()
+fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
 fsRelease s _ rfh = readIORef rfh >>= fsync s
 
 sssfs :: (Storage s, StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
@@ -171,7 +174,7 @@ sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
                           , fuseCreateDevice         = fsMknod s
                           , fuseCreateDirectory      = fsMkdir s
                           , fuseReadDirectory        = fsReadDir s
-                          , fuseRemoveLink           = \_ -> return eNOSYS
+                          , fuseRemoveLink           = fsUnlink s
                           , fuseRemoveDirectory      = fsRmdir s
                           , fuseCreateSymbolicLink   = \_ _ -> return eNOSYS
                           , fuseRename               = \_ _ -> return eNOSYS

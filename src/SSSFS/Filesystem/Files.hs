@@ -46,18 +46,18 @@ import           SSSFS.Filesystem.Blocks
 newtype FileHandle = FileHandle { unHandle :: INode }
 
 -- | Creates a new empty file
-creat :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO FileHandle
+creat :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
 creat s path = do { inum <- mknod s path File
                   ; return (FileHandle inum)
                   }
 
-open :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO FileHandle
+open :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
 open s path = do { inum <- fmap (ensureFile path) (stat s path)
                  ; time <- now
                  ; return (FileHandle $ inum { atime = time })
                  }
 
-ftruncate :: (StorageHashLike s, StorageEnumLike s) => s -> FileHandle -> Seek -> IO FileHandle
+ftruncate :: (StorageHashLike s) => s -> FileHandle -> Seek -> IO FileHandle
 ftruncate s fh0 offset = do { bLast <- fmap (truncateB seek) (load s fh blkIx)
                             ; ufh   <- store s (truncateI fh blkIx) blkIx bLast
                             ; time  <- now
@@ -89,7 +89,7 @@ freadChunks s fh offset bufsz = do { bHead <- fmap (slice bufsz seek) (load s fh
 fstat :: (StorageHashLike s) => s -> FileHandle -> IO INode
 fstat _ = return . unHandle
 
-fwrite :: (StorageHashLike s, StorageEnumLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
+fwrite :: (StorageHashLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
 fwrite s fh0 raw offset = do { nBlocks <- fmap chunks sysload
                              ; inum    <- stores s fh blkIx nBlocks
                              ; time    <- now
@@ -109,7 +109,7 @@ fwrite s fh0 raw offset = do { nBlocks <- fmap chunks sysload
           | fullBlock = return B.empty
           | otherwise = load s fh blkIx
 
-utime :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> Timestamp -> Timestamp -> IO ()
+utime :: (StorageHashLike s) => s -> FilePath -> Timestamp -> Timestamp -> IO ()
 utime s path uAtime uMtime = do { inum <- stat s path
                                 ; time <- now
                                 ; sync s (inum { atime = uAtime
@@ -118,5 +118,5 @@ utime s path uAtime uMtime = do { inum <- stat s path
                                                })
                                 }
 
-fsync :: (StorageHashLike s, StorageEnumLike s) => s -> FileHandle -> IO ()
+fsync :: (StorageHashLike s) => s -> FileHandle -> IO ()
 fsync s = sync s . unHandle

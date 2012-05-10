@@ -24,39 +24,57 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-module SSSFS.Filesystem.Directory
-       ( mkdir
-       , rmdir
-       , readDir
+module SSSFS.Filesystem.LocalStorage
+       ( LocalStorage()
+       , new
+       , dFromOID
+       , iFromOID
+       , iFromINode
+       , fromDirEnt
        ) where
 
-import Control.Exception
-import System.FilePath
-import SSSFS.Storage
-import SSSFS.Except
-import SSSFS.Filesystem.Core
-import SSSFS.Filesystem.Types
+import           System.FilePath
+import           System.Directory
+import           SSSFS.Storage as S
+import qualified SSSFS.Storage.BerkeleyDB as B
+import qualified SSSFS.Storage.Filesystem as F
+import           SSSFS.Filesystem.Types
 
-mkdir :: (StorageHashLike s) => s -> FilePath -> IO INode
-mkdir s path = mknod s path Directory
+newtype LocalStorage = LocalStorage { unPack :: (B.BdbStorage, F.FilesystemStorage) }
 
-rmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
-rmdir s path = do { empty <- fmap not (enumDir s path)
-                  ; if (empty)
-                    then unlink s path
-                    else throw (NotEmpty path)
-                  }
+fstS :: LocalStorage -> B.BdbStorage
+fstS = fst . unPack
 
-enumDir :: (StorageContext s r) => s -> FilePath -> IO r
-enumDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)
-                    ; enum s (iFromINode inum)
-                    }
+sndS :: LocalStorage -> F.FilesystemStorage
+sndS = snd . unPack
 
--- | Returns the contents of a given directory
-readDir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO [(FilePath, INode)]
-readDir s path = enumDir s path >>= mapM (statDEnt . showRefS)
-  where statDEnt dent = do { inum <- stat s dpath
-                           ; return (dent, inum)
-                           }
-          where dpath = path </> dent
+new :: FilePath -> IO LocalStorage
+new home = do { createDirectoryIfMissing True dbhome
+              ; createDirectoryIfMissing True fshome
+              ; bdb <- B.new dbhome
+              ; return (LocalStorage (bdb, F.new fshome))
+              }
+  where dbhome = home </> "db"
+        fshome = home </> "fs"
+
+instance Storage LocalStorage where
+  
+  shutdown = shutdown . fstS
+
+instance StorageHashLike LocalStorage where
+  
+  put s k v 
+    | isDirEnt k = put (sndS s) k v >> put (fstS s) k v
+    | otherwise  = put (fstS s) k v
+  
+  get s k = get (fstS s) k
+  
+  head s k = S.head (fstS s) k
+  
+  del s k
+    | isDirEnt k = del (sndS s) k >> del (fstS s) k
+    | otherwise  = del (fstS s) k
+
+instance StorageEnumLike LocalStorage where
+
+  enumKeys s k = enumKeys (sndS s) k

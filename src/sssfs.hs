@@ -31,8 +31,7 @@ import           System.Console.GetOpt
 import           System.Environment
 import           SSSFS.Fuse
 import           SSSFS.Fuse.Debug
-import qualified SSSFS.Storage.Bdb as B
-import qualified SSSFS.Storage.LocalFS as L
+import qualified SSSFS.Filesystem.LocalStorage as L
 import qualified SSSFS.Storage.Debug as D
 
 data Options = Options { rootdir     :: String
@@ -75,7 +74,7 @@ main = do { prg   <- getProgName
             of Left err
                  -> error err
                Right opts
-                 -> do { s <- B.new $ rootdir opts
+                 -> do { s <- L.new $ rootdir opts
                        ; withArgs (fuseOpts opts) $ exec (storage s opts) (fuseDbg opts)
                        }
           }

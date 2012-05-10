@@ -30,8 +30,8 @@
 -- | This module provides a very simple implementation using the local
 -- filesystem. You generally don't want to use this, except perhaps
 -- for testing purposes.
-module SSSFS.Storage.LocalFS
-       ( LocalStorage()
+module SSSFS.Storage.Filesystem
+       ( FilesystemStorage()
        , new
        ) where
 
@@ -46,13 +46,13 @@ import           System.IO
 import           SSSFS.Except
 import           SSSFS.Storage
 
-newtype LocalStorage = LocalStorage FilePath
+newtype FilesystemStorage = FilesystemStorage FilePath
 
 maxSize :: Int
 maxSize = 1 * 1024 * 1024
 
-new :: FilePath -> LocalStorage
-new = LocalStorage
+new :: FilePath -> FilesystemStorage
+new = FilesystemStorage
 
 -- | Relies on POSIX guarantees that a move operation in the same
 -- partition is atomic. You better be using a local filesystem.
@@ -66,12 +66,6 @@ atomicWrite dst mcontents = let dir = takeDirectory dst
                                          -> B.hPut tmpH contents >> hClose tmpH
                                   ; renameFile tmpF dst
                                   }
-
--- unsafeWrite :: FilePath -> B.ByteString -> IO ()
--- unsafeWrite dst contents = do { fh <- openBinaryFile dst WriteMode
---                               ; B.hPut fh contents
---                               ; hClose fh
---                               }
 
 readContent :: FilePath -> IO B.ByteString
 readContent file = do { h <- openBinaryFile file ReadMode
@@ -107,43 +101,27 @@ putFile f v = let dir = takeDirectory f
                     ; atomicWrite f v
                     }
 
-dataKey :: Key -> Key
-dataKey = (fromStr "data" ++)
+instance Storage FilesystemStorage
 
-indexKey :: Key -> Key
-indexKey = (fromStr "indx" ++)
-
-instance Storage LocalStorage
-
-instance StorageHashLike LocalStorage where
+instance StorageHashLike FilesystemStorage where
   
-  put (LocalStorage root) k0 v = let k = dataKey k0
-                                 in putFile (chroot_ root k) (Just v)
+  put (FilesystemStorage root) k v = putFile (chroot_ root k) (Just v)
   
-  get (LocalStorage root) k0 = let k = dataKey k0
-                               in C.catch (readContent (chroot_ root k))
-                                  (\e -> if (isDoesNotExistError e)
-                                         then (throw $ NotFound (showKeyS k))
-                                         else ioError e)
+  get (FilesystemStorage root) k = C.catch (readContent (chroot_ root k))
+                                   (\e -> if (isDoesNotExistError e)
+                                          then (throw $ NotFound (showKeyS k))
+                                          else ioError e)
   
-  del (LocalStorage root) k0 = let k = dataKey k0
-                               in removeFile (chroot_ root k)
+  del (FilesystemStorage root) k = removeFile (chroot_ root k)
   
-  head (LocalStorage root) k0 = let k = dataKey k0
-                                in doesFileExist (chroot_ root k)
+  head (FilesystemStorage root) k = doesFileExist (chroot_ root k)
   
-instance StorageEnumLike LocalStorage where
+instance StorageEnumLike FilesystemStorage where
   
-  index (LocalStorage root) k0 v  = let k = indexKey k0
-                                    in putFile (chroot_ root (k ++ [v])) Nothing
-  unindex (LocalStorage root) k0 v = let k = indexKey k0
-                                     in removeFile (chroot_ root (k ++ [v]))
-  
-  enumKeys (LocalStorage root) k0 = let k          = indexKey k0
-                                        path       = chroot root k encodePathDir
-                                        decode     = map (ref . decodePath)
-                                        filterList = filter ("f" `isPrefixOf`)
-                                    in C.catch (fmap (decode . filterList) (getDirectoryContents path))
-                                       (\e -> if (isDoesNotExistError e)
-                                              then return []
-                                              else ioError e)
+  enumKeys (FilesystemStorage root) k = let path       = chroot root k encodePathDir
+                                            decode     = map (ref . decodePath)
+                                            filterList = filter ("f" `isPrefixOf`)
+                                        in C.catch (fmap (decode . filterList) (getDirectoryContents path))
+                                           (\e -> if (isDoesNotExistError e)
+                                                  then return []
+                                                  else ioError e)

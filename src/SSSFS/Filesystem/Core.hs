@@ -29,7 +29,7 @@ module SSSFS.Filesystem.Core
        ( mkfs
        , stat
        , mknod
-       , unlinkNod
+       , unlink
        , sync
        , load
        , store
@@ -45,24 +45,21 @@ import           SSSFS.Except
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Path
 
-type MakeKey = StorageUnit -> (Maybe Key, Key)
+type MakeKey = StorageUnit -> Key
 
 makeKey :: MakeKey
-makeKey (INodeUnit o _ _)   = (Nothing, iFromOID o)
-makeKey (DataBlockUnit o _) = (Nothing, dFromOID o)
-makeKey (DirEntUnit o _)    = (Nothing, fromStr o)
+makeKey (INodeUnit o _ _)   = iFromOID o
+makeKey (DataBlockUnit o _) = dFromOID o
+makeKey (DirEntUnit o _)    = fromStr o
 
 makeKeyWithPrefix :: Key -> MakeKey
-makeKeyWithPrefix k u = let (_, k1) = makeKey u
-                        in (Just k, k ++ k1)
+makeKeyWithPrefix k = (k++) . makeKey
 
-putUnit :: (StorageHashLike s, StorageEnumLike s) => s -> StorageUnit -> MakeKey -> IO Key
-putUnit s u@(DirEntUnit l _) f = let (Just k0, k1) = f u
-                                  in put s k1 (value u) >> index s k0 (ref l) >> return k1
-putUnit s u f                  = let (_, k) = f u
-                                 in put s k (value u) >> return k
+putUnit :: (StorageHashLike s) => s -> StorageUnit -> MakeKey -> IO Key
+putUnit s u f = let k = f u
+                in put s k (value u) >> return k
 
-putUnit_ :: (StorageHashLike s, StorageEnumLike s) => s -> StorageUnit -> MakeKey -> IO ()
+putUnit_ :: (StorageHashLike s) => s -> StorageUnit -> MakeKey -> IO ()
 putUnit_ s u f = putUnit s u f >> return ()
 
 getUnit :: (StorageHashLike s) => s -> Key -> IO StorageUnit
@@ -80,7 +77,7 @@ follow s l = do { u <- getUnit s l
 -- | Initializes a new filesystem. This is a very fast operation. It
 -- creates a new inode with no contents and changes the root
 -- inode.
-mkfs :: (StorageHashLike s, StorageEnumLike s) => s -> IO ()
+mkfs :: (StorageHashLike s) => s -> IO ()
 mkfs s = do { inum <- mkINode (Just oidOne) Directory
             ; putUnit_ s (inodeToUnit inum) makeKey
             ; putUnit_ s (DataBlockUnit oidZero B.empty) makeKey
@@ -92,7 +89,7 @@ mkfs s = do { inum <- mkINode (Just oidOne) Directory
 -- This function does not check if there is a link already. It will
 -- get overwritten with no mercy. Make sure you do this before calling
 -- mknod.
-mknod :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IType -> IO INode
+mknod :: (StorageHashLike s) => s -> FilePath -> IType -> IO INode
 mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
                         ; inum   <- mkINode Nothing ftype
                         ; putUnit_ s (inodeToUnit inum) makeKey
@@ -105,16 +102,15 @@ mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
 -- checkings so you better be sure you want to delete this entry. In
 -- general this should be the backend of functions suchs as `rmdir'
 -- and `unlink'.
-unlinkNod :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
-unlinkNod s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
-                      ; del s (fromLinkName (inode p_inum) name)
-                      ; unindex s (iFromINode p_inum) (ref name)
-                      }
+unlink :: (StorageHashLike s) => s -> FilePath -> IO ()
+unlink s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
+                   ; del s (fromDirEnt (inode p_inum) name)
+                   }
   where dir = dirname path
         
         name = basename path
 
-sync :: (StorageHashLike s, StorageEnumLike s) => s -> INode -> IO ()
+sync :: (StorageHashLike s) => s -> INode -> IO ()
 sync s inum = do { putUnit_ s (inodeToUnit inum) makeKey
                  }
 
@@ -125,13 +121,13 @@ load s inum ix = fmap unpack (getUnit s (addr blkPtr))
         unpack (DataBlockUnit _ bytes) = bytes
         unpack _                       = throw (DataCorruptionExcept "SSSFS.Filesystem.Core.load")
 
-store :: (StorageHashLike s, StorageEnumLike s) => s -> INode -> BlockIx -> Block -> IO INode
+store :: (StorageHashLike s) => s -> INode -> BlockIx -> Block -> IO INode
 store s inum ix raw = do { oid <- newid
                          ; key <- putUnit s (DataBlockUnit oid raw) makeKey
                          ; return (putBlock inum ix (Direct key (B.length raw)))
                          }
 
-stores :: (StorageHashLike s, StorageEnumLike s) => s -> INode -> BlockIx -> [Block] -> IO INode
+stores :: (StorageHashLike s) => s -> INode -> BlockIx -> [Block] -> IO INode
 stores s inum0 ix0 blks = fmap fst (foldM f (inum0, ix0) blks)
   where f (inum,ix) blk = fmap (\a -> (a,ix+1)) (store s inum ix blk)
 
@@ -151,6 +147,6 @@ stat s p = do { root <- fmap mUnitToINode (getUnit s keyOne)
               }
   where stat_ inum []        = return inum
         stat_ inum (x:xs)
-          | isDirectory inum = follow s (fromLinkName (inode inum) x) >>= flip stat_ xs
+          | isDirectory inum = follow s (fromDirEnt (inode inum) x) >>= flip stat_ xs
           | otherwise        = throw (NotADir p)
 

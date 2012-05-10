@@ -72,7 +72,8 @@ module SSSFS.Filesystem.Types
        , iFromOID
        , iFromINode
        , fromStorageUnit
-       , fromLinkName
+       , fromDirEnt
+       , isDirEnt
        , value
        , eulav
        , eulavM
@@ -155,10 +156,10 @@ oidZero :: OID
 oidZero = B8.pack "0"
 
 keyOne :: Key
-keyOne = fromStr "i" ++ fromOID oidOne
+keyOne = iFromOID oidOne
 
 keyZero :: Key
-keyZero = fromStr "d" ++ fromOID oidZero
+keyZero = dFromOID oidZero
 
 getBlock :: INode -> BlockIx -> Maybe DataBlock
 getBlock inum ix = M.lookup ix (blocks inum)
@@ -221,8 +222,12 @@ iFromOID = (fromStr "i" ++) . fromOID
 iFromINode :: INode -> Key
 iFromINode = (fromStr "i" ++) . fromOID . inode
 
-fromLinkName :: OID -> String -> Key
-fromLinkName o n = iFromOID o ++ fromStr n
+isDirEnt :: Key -> Bool
+isDirEnt ["i",_,_] = True
+isDirEnt _         = False
+
+fromDirEnt :: OID -> String -> Key
+fromDirEnt o n = iFromOID o ++ fromStr n
 
 fromStorageUnit :: StorageUnit -> Either Key (OID -> Key)
 fromStorageUnit u = case u
@@ -231,7 +236,7 @@ fromStorageUnit u = case u
            DataBlockUnit o _
              -> Left $ dFromOID o
            DirEntUnit n _
-             -> Right $ \o -> fromLinkName o n
+             -> Right $ \o -> fromDirEnt o n
 
 value :: (S.Serialize a) => a -> B.ByteString
 value = S.encode
