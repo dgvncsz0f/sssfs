@@ -37,10 +37,9 @@ module SSSFS.Filesystem.Core
        ) where
 
 import qualified Data.ByteString as B
-import           Data.Maybe
-import           Control.Monad (mplus, foldM)
+import           Control.Monad (foldM)
 import           Control.Exception
-import           SSSFS.Storage
+import           SSSFS.Storage as S
 import           SSSFS.Except
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Path
@@ -48,9 +47,9 @@ import           SSSFS.Filesystem.Path
 type MakeKey = StorageUnit -> Key
 
 makeKey :: MakeKey
-makeKey (INodeUnit o _ _)   = iFromOID o
-makeKey (DataBlockUnit o _) = dFromOID o
-makeKey (DirEntUnit o _)    = fromStr o
+makeKey (INodeUnit o _ _)      = iFromOID o
+makeKey (DataBlockUnit o ix _) = dFromOID o ix
+makeKey (DirEntUnit o _)       = fromStr o
 
 makeKeyWithPrefix :: Key -> MakeKey
 makeKeyWithPrefix k = (k++) . makeKey
@@ -80,7 +79,6 @@ follow s l = do { u <- getUnit s l
 mkfs :: (StorageHashLike s) => s -> IO ()
 mkfs s = do { inum <- mkINode (Just oidOne) Directory
             ; putUnit_ s (inodeToUnit inum) makeKey
-            ; putUnit_ s (DataBlockUnit oidZero B.empty) makeKey
             }
 
 -- | Creates a new entry on a given directory. The dirname of this
@@ -115,17 +113,20 @@ sync s inum = do { putUnit_ s (inodeToUnit inum) makeKey
                  }
 
 load :: (StorageHashLike s) => s -> INode -> BlockIx -> IO Block
-load s inum ix = fmap unpack (getUnit s (addr blkPtr))
-  where blkPtr = fromJust $ getBlock inum ix `mplus` Just (Direct keyZero 0)
+load s inum ix = do { if (size inum > ixSize)
+                      then fmap unpack (getUnit s (dFromINode inum ix))
+                      else return B.empty
+                    }
+  where unpack (DataBlockUnit _ _ bytes) = bytes
+        unpack _                         = throw (DataCorruptionExcept "SSSFS.Filesystem.Core.load")
         
-        unpack (DataBlockUnit _ bytes) = bytes
-        unpack _                       = throw (DataCorruptionExcept "SSSFS.Filesystem.Core.load")
-
+        ixSize = (fromIntegral $ blksz inum) * ix
+        
 store :: (StorageHashLike s) => s -> INode -> BlockIx -> Block -> IO INode
-store s inum ix raw = do { oid <- newid
-                         ; key <- putUnit s (DataBlockUnit oid raw) makeKey
-                         ; return (putBlock inum ix (Direct key (B.length raw)))
+store s inum ix raw = do { putUnit_ s (DataBlockUnit oid ix raw) makeKey
+                         ; return (putBlock inum ix raw)
                          }
+  where oid = fst (blocks inum)
 
 stores :: (StorageHashLike s) => s -> INode -> BlockIx -> [Block] -> IO INode
 stores s inum0 ix0 blks = fmap fst (foldM f (inum0, ix0) blks)

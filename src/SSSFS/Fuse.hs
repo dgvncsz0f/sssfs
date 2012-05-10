@@ -34,7 +34,6 @@ import           Control.Monad
 import           Control.Exception
 import           Data.Bits
 import           Data.IORef
-import qualified Data.Map as M
 import           Foreign.C.Error
 import           System.Fuse as F
 import           System.Posix.Types
@@ -76,13 +75,13 @@ inodeToFileStat inum = FileStat { statEntryType        = itypeToEntryType (itype
                    T.Directory 
                      -> ownerReadMode .|. ownerWriteMode .|. ownerExecuteMode
         
-        numBlocks = M.size (blocks inum)
+        numBlocks = fromIntegral $ snd (blocks inum)
         blkFactor = blksz inum `div` 512
 
 install :: IO a -> (Errno -> IO a) -> IO a
 install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
                           , Handler (\(e :: SysExcept)     -> handlerB e)
-                          -- , Handler (\(e :: SomeException) -> handlerB e)
+                          , Handler (\(e :: SomeException) -> handlerB e)
                           ]
   where handlerA (NotFound _) = g eNOENT
         handlerA (NotADir _)  = g eNOTDIR

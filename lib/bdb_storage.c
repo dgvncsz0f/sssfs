@@ -57,7 +57,7 @@ int __init_db(DB_ENV *env, DB *db, const char *name, u_int32_t flags)
 {
   int ret;
 
-  db->set_pagesize(db, 8192);
+  db->set_pagesize(db, 4096);
   if (flags != 0)
     db->set_flags(db, flags);
 

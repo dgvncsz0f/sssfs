@@ -33,24 +33,23 @@ module SSSFS.Filesystem.Types
        , Timestamp
        , Metadata
        , Blocks
-       , DataBlock(..)
        , INode(..)
        , StorageUnit(..)
        , IType(..)
        , Block
        , BlockSeek
+       , BlockSize
        , BlockIx
        , Seek
-       , Size
          -- | INode functions
        , mkINode
        , ensureDirectory
        , ensureFile
        , isFile
        , isDirectory
-       , getBlock
        , putBlock
        , truncateI
+       , address
          -- | Metadata String Functions
        , encode
        , decode
@@ -61,8 +60,6 @@ module SSSFS.Filesystem.Types
        , toList
          -- | Unique IDs
        , newid
-       , oidZero
-       , keyZero
        , oidOne
        , keyOne
          -- | Date/Time Functions
@@ -70,6 +67,7 @@ module SSSFS.Filesystem.Types
          -- | StorageUnit Functions
        , dFromOID
        , iFromOID
+       , dFromINode
        , iFromINode
        , fromStorageUnit
        , fromDirEnt
@@ -90,7 +88,6 @@ import           Data.Maybe
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as B8
 import qualified Data.Text as T
-import qualified Data.Map as M
 import           Data.Text.Encoding
 import qualified Data.Serialize as S
 import           System.Posix.Clock
@@ -108,21 +105,14 @@ type Seek = Integer
 
 type BlockSeek = Int
 
-type Size = Int
+type BlockSize = Int
 
-type BlockIx = Int
+type BlockIx = Integer
 
-type Blocks = M.Map Int DataBlock
+type Blocks = (OID, Integer)
 
 -- | Arbirtrary information held as a key-value pair
 type Metadata = [(B.ByteString, B.ByteString)]
-
--- | A data block is a pointer to a chunk of data.
--- 
-data DataBlock = Direct { addr :: Key 
-                        , sz   :: Int
-                        }
-               deriving (Eq,Show)
 
 data IType = File
            | Directory
@@ -136,14 +126,14 @@ data INode = INode { inode  :: OID                 -- ^ Unique id of this inode
                    , ctime  :: Timestamp           -- ^ Creation time
                    , mtime  :: Timestamp           -- ^ Modification time
                    , meta   :: Metadata            -- ^ Arbitrary metadata information
-                   , blksz  :: Int                 -- ^ Fixed size of each datablock
-                   , size   :: Integer             -- ^ Size of this file in bytes
+                   , blksz  :: BlockSize           -- ^ Fixed size of each datablock
+                   , size   :: Seek                -- ^ Size of this file in bytes
                    , blocks :: Blocks              -- ^ The actual file contents
                    }
            deriving (Eq,Show)
 
 data StorageUnit = INodeUnit OID Metadata Metadata
-                 | DataBlockUnit OID B.ByteString
+                 | DataBlockUnit OID BlockIx B.ByteString
                  | DirEntUnit String OID
 
 newid :: IO OID
@@ -152,31 +142,8 @@ newid = fmap (B8.pack . toString . fromJust) nextUUID
 oidOne :: OID
 oidOne = B8.pack "1"
 
-oidZero :: OID
-oidZero = B8.pack "0"
-
 keyOne :: Key
 keyOne = iFromOID oidOne
-
-keyZero :: Key
-keyZero = dFromOID oidZero
-
-getBlock :: INode -> BlockIx -> Maybe DataBlock
-getBlock inum ix = M.lookup ix (blocks inum)
-
-putBlock :: INode -> BlockIx -> DataBlock -> INode
-putBlock inum ix blk
-  | sz blk == 0 = inum 
-  | otherwise   = updateSize $ inum { blocks = uBlocks }
-    where uBlocks = M.insert ix blk (blocks inum)
-        
-truncateI :: INode -> BlockIx -> INode
-truncateI inum newSz = updateSize $ inum { blocks = uBlocks }
-  where uBlocks = M.filterWithKey (\k _ -> k<newSz) (blocks inum)
-                                                
-updateSize :: INode -> INode
-updateSize inum = inum { size = M.fold (\a b -> szI a + b) 0 (blocks inum) }
-  where szI = fromIntegral . sz
 
 now :: IO Timestamp
 now = do { t <- getTime Realtime
@@ -194,6 +161,28 @@ encode = encodeUtf8
 
 decode :: B.ByteString -> T.Text
 decode = decodeUtf8
+
+putBlock :: INode -> BlockIx -> Block -> INode
+putBlock inum ix bytes
+  | ix+1 >= nblocks = inum { size   = uSize
+                           , blocks = (oblocks, ix+1)
+                           }
+  | otherwise       = inum
+    where (oblocks, nblocks) = blocks inum
+          
+          uSize = (fromIntegral $ blksz inum) * ix + (fromIntegral $ B.length bytes)
+
+address :: BlockSize -> Seek -> (BlockIx, BlockSeek)
+address bsz offset = let (blk, inOffset) = offset `divMod` (fromIntegral bsz)
+                     in (fromIntegral blk, fromIntegral inOffset)
+
+truncateI :: INode -> Seek -> INode
+truncateI inum offset = inum { blocks = (oblocks, blkIx)
+                             , size   = offset
+                             }
+  where (oblocks, _) = blocks inum
+    
+        (blkIx, _) = address (blksz inum) offset
 
 encodePair :: (T.Text, T.Text) -> (B.ByteString, B.ByteString)
 encodePair (a,b) = (encode a, encode b)
@@ -213,8 +202,11 @@ toList = map decodePair
 fromOID :: OID -> Key
 fromOID o = fromStr (B8.unpack o)
 
-dFromOID :: OID -> Key
-dFromOID = (fromStr "d" ++) . fromOID
+dFromOID :: OID -> BlockIx -> Key
+dFromOID o ix = fromStr "d" ++ fromOID o ++ fromStr (show ix)
+
+dFromINode :: INode -> BlockIx -> Key
+dFromINode i = dFromOID (fst (blocks i))
 
 iFromOID :: OID -> Key
 iFromOID = (fromStr "i" ++) . fromOID
@@ -233,8 +225,8 @@ fromStorageUnit :: StorageUnit -> Either Key (OID -> Key)
 fromStorageUnit u = case u
         of INodeUnit o _ _
              -> Left $ iFromOID o
-           DataBlockUnit o _
-             -> Left $ dFromOID o
+           DataBlockUnit o ix _
+             -> Left $ dFromOID o ix
            DirEntUnit n _
              -> Right $ \o -> fromDirEnt o n
 
@@ -253,8 +245,9 @@ eulavM raw = case (eulav raw)
 
 mkINode :: Maybe OID -> IType -> IO INode
 mkINode moid ftype = do { time  <- now
-                        ; moid2 <- fmap pure newid
-                        ; return $ INode { inode  = fromJust (moid <|> moid2)
+                        ; ioid  <- fmap pure newid
+                        ; boid  <- newid
+                        ; return $ INode { inode  = fromJust (moid <|> ioid)
                                          , itype  = ftype
                                          , atime  = time
                                          , ctime  = time
@@ -262,9 +255,9 @@ mkINode moid ftype = do { time  <- now
                                          , meta   = []
                                          , size   = 0
                                          , blksz  = blockSize
-                                         , blocks = M.empty
+                                         , blocks = (boid, 0)
                                          }
-                       }
+                        }
 
 inodeToUnit :: INode -> StorageUnit
 inodeToUnit i = let core = [ (encode "inode", inode i)
@@ -274,7 +267,7 @@ inodeToUnit i = let core = [ (encode "inode", inode i)
                            , (encode "mtime", value (mtime i))
                            , (encode "blksz", value (blksz i))
                            , (encode "size", value (size i))
-                           , (encode "blocks", value (M.toList $ blocks i))
+                           , (encode "blocks", value (blocks i))
                            ]
                     user = meta i
                 in INodeUnit (inode i) core user
@@ -291,7 +284,7 @@ unitToINode (INodeUnit _ c u) = INode <$> (lookup "inode" core)
                                       <*> (Just u)
                                       <*> (lookup "blksz" core >>= eulavM)
                                       <*> (lookup "size" core >>= eulavM)
-                                      <*> (lookup "blocks" core >>= fmap M.fromList . eulavM)
+                                      <*> (lookup "blocks" core >>= eulavM)
   where core = map (\(k,v) -> (decode k, v)) c
 unitToINode _               = Nothing
 
@@ -316,15 +309,6 @@ instance S.Serialize IType where
                 _ -> fail "unknow opcode"
            }
 
-instance S.Serialize DataBlock where
-  put (Direct k s) = S.putWord8 0 >> S.put k >> S.put s
-  
-  get = do { opcode <- S.getWord8
-           ; case opcode
-             of 0 -> liftA2 Direct S.get S.get
-                _ -> fail "unknown opcode"
-           }
-
 instance S.Serialize StorageUnit where
   put (INodeUnit o c u) = 
     do { S.putWord8 0
@@ -332,9 +316,10 @@ instance S.Serialize StorageUnit where
        ; S.put c
        ; S.put u
        }
-  put (DataBlockUnit o raw) =
+  put (DataBlockUnit o ix raw) =
     do { S.putWord8 1
        ; S.put o
+       ; S.put ix
        ; S.put raw
        }
   put (DirEntUnit name oid) =
@@ -347,7 +332,7 @@ instance S.Serialize StorageUnit where
     do { opcode <- S.getWord8
        ; case opcode 
          of 0 -> liftA3 INodeUnit S.get S.get S.get
-            1 -> liftA2 DataBlockUnit S.get S.get
+            1 -> liftA3 DataBlockUnit S.get S.get S.get
             2 -> liftA2 DirEntUnit S.get S.get
             _ -> fail "unknown opcode"
        }

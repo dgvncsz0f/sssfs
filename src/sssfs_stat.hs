@@ -30,14 +30,10 @@ import           System.IO
 import           System.Environment
 import           Control.Exception
 import qualified Data.ByteString as B
-import qualified Data.Map as M
 import           Data.Maybe
 import           Data.List (intercalate)
 import           SSSFS.Storage (showKeyS)
 import           SSSFS.Filesystem.Types
-
-showBlocks :: Blocks -> String
-showBlocks = intercalate "\n        " . map (\(_, blk) -> showKeyS . addr $ blk) . M.toList 
 
 main :: IO ()
 main = do { f        <- fmap head getArgs
@@ -52,9 +48,10 @@ main = do { f        <- fmap head getArgs
         render []         = return ()
         render ((a,b):xs) = putStrLn (a ++ ": " ++ b) >> render xs
     
-        decodeUnit (DataBlockUnit o _) = [ ("type", "datablock")
-                                         , ("oid", showKeyS $ dFromOID o)
-                                         ]
+        decodeUnit (DataBlockUnit o ix _) = [ ("type", "datablock")
+                                            , ("oid", show o)
+                                            , ("index", show ix)
+                                            ]
         decodeUnit (DirEntUnit n o)    = [ ("type", "dirent")
                                          , ("name", n)
                                          , ("oid", showKeyS $ iFromOID o)
@@ -67,7 +64,7 @@ main = do { f        <- fmap head getArgs
                                          , ("ctime", show (ctime inum))
                                          , ("blksz", show (blksz inum))
                                          , ("size", show (size inum))
-                                         , ("blocks", showBlocks (blocks inum))
+                                         , ("blocks", show (blocks inum))
                                          ]
           where inum = fromJust (unitToINode u)
                 

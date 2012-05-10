@@ -25,34 +25,29 @@
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module SSSFS.Filesystem.Blocks
-       ( writeB
+       ( updateB
        , truncateB
        , toChunks
        , slice
-       , calc
        ) where
 
 import qualified Data.ByteString as B
 import           SSSFS.Filesystem.Types
 
-writeB :: BlockSeek -> Block -> Block -> Block
-writeB offset old new = let (prefix, maybeSuffix) = B.splitAt offset old
-                            padding               = B.replicate (offset - B.length prefix) 0
-                            suffix                = B.drop (B.length new) maybeSuffix
-                        in B.concat [prefix, padding, new, suffix]
+updateB :: BlockSeek -> Block -> Block -> Block
+updateB offset old new = let (prefix, maybeSuffix) = B.splitAt offset old
+                             padding               = B.replicate (offset - B.length prefix) 0
+                             suffix                = B.drop (B.length new) maybeSuffix
+                         in B.concat [prefix, padding, new, suffix]
 
 truncateB :: BlockSeek -> Block -> Block
 truncateB = B.take
 
-toChunks :: Block -> Size -> [Block]
+toChunks :: Block -> BlockSize -> [Block]
 toChunks bytes s 
   | B.null bytes = []
   | otherwise    = let (a,b) = B.splitAt s bytes
                    in a : toChunks b s
 
-slice :: Size -> BlockSeek -> Block -> Block
+slice :: BlockSize -> BlockSeek -> Block -> Block
 slice bsz offset = B.take bsz . B.drop offset
-
-calc :: Size -> Seek -> (BlockIx, BlockSeek)
-calc bsz offset = let (block, inOffset) = offset `divMod` (fromIntegral bsz)
-                  in (fromIntegral block, fromIntegral inOffset)
