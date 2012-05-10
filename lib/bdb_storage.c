@@ -65,7 +65,7 @@ int __init_db(DB_ENV *env, DB *db, const char *name, u_int32_t flags)
         | DB_AUTO_COMMIT
         | DB_READ_UNCOMMITTED
         | DB_THREAD;
-  ret = db->open(db, NULL, name, NULL, DB_HASH, flags, 0);
+  ret = db->open(db, NULL, name, NULL, DB_BTREE, flags, 0);
   if (ret != 0)
   {
     env->close(env, 0);
