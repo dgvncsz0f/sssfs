@@ -37,44 +37,74 @@ module SSSFS.Filesystem.Files
        , fstat
        ) where
 
+import           Control.Monad
 import qualified Data.ByteString as B
 import           SSSFS.Storage
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Core
 import           SSSFS.Filesystem.Blocks
 
-newtype FileHandle = FileHandle { unHandle :: INode }
+data FileHandle = FileHandle { unHandle :: INode
+                             , shared   :: Bool
+                             }
 
 -- | Creates a new empty file
 creat :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
 creat s path = do { inum <- mknod s path File
-                  ; return (FileHandle inum)
+                  ; return (FileHandle inum False)
                   }
 
 open :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
 open s path = do { inum <- fmap (ensureFile path) (stat s path)
                  ; time <- now
-                 ; return (FileHandle $ inum { atime = time })
+                 ; return (FileHandle (inum { atime = time }) True)
                  }
 
 ftruncate :: (StorageHashLike s) => s -> FileHandle -> Seek -> IO FileHandle
-ftruncate s fh0 offset = do { time  <- now
-                            ; bLast <- fmap (truncateB bseek) (load s fh blkix)
-                            ; ufh   <- store s (truncateI fh blkix) blkix bLast
-                            ; return (FileHandle $ ufh { mtime = time
-                                                       , ctime = time
-                                                       })
+ftruncate s fh0 offset = do { time      <- now
+                            ; (fh',fh1) <- fmap (\x -> (x, unHandle x)) (unshare s fh0 transferF)
+                            ; return (fh' { unHandle = fh1 { mtime = time
+                                                           , ctime = time
+                                                           }
+                                          })
                             }
   where fh = unHandle fh0
-        
+
         (blkix, bseek) = address (blksz fh) offset
+
+        transferF = transferOnly blkix bseek
 
 fread :: (StorageHashLike s) => s -> FileHandle -> Seek -> Int -> IO (FileHandle, Block)
 fread s fh0 offset sz = do { time <- now
                            ; blk  <- fmap B.concat (sysread s fh offset sz)
-                           ; return (FileHandle $ fh { atime = time }, blk)
+                           ; return (fh0 { unHandle = fh { atime = time } }, blk)
                            }
   where fh = unHandle fh0
+
+transferAll :: BlockIx -> Maybe (Block -> Block)
+transferAll _ = Just id
+
+transferOnly :: BlockIx -> BlockSeek -> BlockIx -> Maybe (Block -> Block)
+transferOnly blkix bseek ix
+  | ix < blkix  = Just id
+  | ix == blkix = if (bseek > 0) then (Just $ B.take bseek) else Nothing
+  | otherwise   = Nothing
+
+copyBlocks :: (StorageHashLike s) => s -> INode -> (BlockIx -> Maybe (Block -> Block)) -> INode -> IO INode
+copyBlocks s src mkF dst0 = foldM copyBlock dst0 [0..bsz]
+  where bsz = snd (blocks src)
+
+        copyBlock dst ix = case (mkF ix)
+                           of Nothing -> return dst
+                              Just f  -> fmap f (load s src ix) >>= store s dst ix
+
+unshare :: (StorageHashLike s) => s -> FileHandle -> (BlockIx -> Maybe (Block -> Block)) -> IO FileHandle
+unshare s fh0 mkF
+    | shared fh0 = fmap fh1 newid >>= fmap (flip FileHandle False) . copyBlocks s (unHandle fh0) mkF
+    | otherwise  = return fh0
+  where fh1 oid = (unHandle fh0) { blocks = (oid, 0) 
+                                 , size   = 0
+                                 }
 
 
 sysread :: (StorageHashLike s) => s -> INode -> Seek -> Int -> IO [Block]
@@ -91,27 +121,30 @@ fstat :: (StorageHashLike s) => s -> FileHandle -> IO INode
 fstat _ = return . unHandle
 
 fwrite :: (StorageHashLike s) => s -> FileHandle -> Block -> Seek -> IO FileHandle
-fwrite s fh0 raw offset = do { time    <- now
-                             ; nBlocks <- fmap chunks smartLoad
-                             ; inum    <- stores s fh blkix nBlocks
-                             ; return (FileHandle $ inum { mtime = time
-                                                         , ctime = time
-                                                         })
+fwrite s fh0 raw offset = do { time     <- now
+                             ; (fh',fh) <- fmap (\x -> (x, unHandle x)) (unshare s fh0 transferAll)
+                             ; nBlocks  <- fmap (chunks fh) (smartLoad fh)
+                             ; inum     <- stores s fh (getBlkix fh) nBlocks
+                             ; return (fh' { unHandle = inum { mtime = time
+                                                             , ctime = time
+                                                             }
+                                           })
                              }
-  where fh = unHandle fh0
-    
-        (blkix, bseek) = address (blksz fh) offset
-        
-        chunks oBlock = toChunks (updateB bseek oBlock raw) (blksz fh)
-        
+  where getSize fh = address (blksz fh) offset
+
+        getBlkix = fst . getSize
+
         bytes = B.length raw
-        
-        aligned = (bseek==0) && (bytes >= blksz fh)
-        
-        smartLoad
-          | aligned   = return B.empty
-          | otherwise = load s fh blkix
-        
+
+        chunks fh oBlock = toChunks (updateB bseek oBlock raw) (blksz fh)
+          where (_, bseek) = getSize fh
+
+        smartLoad fh
+            | aligned   = return B.empty
+            | otherwise = load s fh blkix
+          where (blkix, bseek) = getSize fh
+                aligned        = (bseek==0) && (bytes >= blksz fh)
+
 utime :: (StorageHashLike s) => s -> FilePath -> Timestamp -> Timestamp -> IO ()
 utime s path uAtime uMtime = do { time <- now
                                 ; inum <- stat s path
@@ -121,5 +154,7 @@ utime s path uAtime uMtime = do { time <- now
                                                })
                                 }
 
-fsync :: (StorageHashLike s) => s -> FileHandle -> IO ()
-fsync s = sync s . unHandle
+fsync :: (StorageHashLike s) => s -> FileHandle -> IO FileHandle
+fsync s fh0 = do { sync s (unHandle fh0)
+                 ; return (fh0 { shared = True } )
+                 }

@@ -115,10 +115,10 @@ fsStat s path Nothing = exToEither (fmap inodeToFileStat (stat s path))
 fsStat s _ (Just rfh) = exToEither (fmap inodeToFileStat (readIORef rfh >>= fstat s))
 
 fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
-fsOpen s path _ _ = exToEither $ do { fh <- open s path
-                                    ; fsync s fh
-                                    ; newIORef fh
-                                    }
+fsOpen s path _ flags = exToEither $ sysopen >>= fsync s >>= newIORef
+  where sysopen
+          | trunc flags = open s path >>= flip (ftruncate s) 0
+          | otherwise   = open s path
 
 fsInit :: (StorageHashLike s) => s -> IO ()
 fsInit s = do { oldfs <- S.head s keyOne 
@@ -143,11 +143,12 @@ fsWrite s _ rfh bytes pOffset = exToEither $ do { fh <- readIORef rfh >>= syswri
 
 fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
 fsTruncate s path pOffset Nothing = exToErrno $ do { fh <- open s path
-                                                   ; ftruncate s fh (fromIntegral pOffset) >>= fsync s
+                                                   ; _  <- ftruncate s fh (fromIntegral pOffset) >>= fsync s
+                                                   ; return ()
                                                    }
 fsTruncate s _ pOffset (Just rfh) = exToErrno $ do { fh <- readIORef rfh >>= flip (ftruncate s) (fromIntegral pOffset)
                                                    ; _  <- modifyIORef rfh (const fh)
-                                                   ; fsync s fh
+                                                   ; return ()
                                                    }
 
 fsUtime :: (StorageHashLike s) => s -> FilePath -> EpochTime -> EpochTime -> IO Errno
@@ -162,10 +163,15 @@ fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
 fsFlush _ _ _ = return eOK
 
 fsFSync :: (StorageHashLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
-fsFSync s _ _ rfh = exToErrno $ readIORef rfh >>= fsync s
+fsFSync s _ _ rfh = exToErrno $ do { fh <- readIORef rfh >>= fsync s
+                                   ; _  <- modifyIORef rfh (const fh)
+                                   ; return ()
+                                   }
 
 fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
-fsRelease s _ rfh = readIORef rfh >>= fsync s
+fsRelease s _ rfh = do { _ <- readIORef rfh >>= fsync s
+                       ; return ()
+                       }
 
 sssfs :: (Storage s, StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
 sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s

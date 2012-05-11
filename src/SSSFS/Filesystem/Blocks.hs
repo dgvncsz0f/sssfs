@@ -26,7 +26,6 @@
 
 module SSSFS.Filesystem.Blocks
        ( updateB
-       , truncateB
        , toChunks
        , slice
        ) where
@@ -39,9 +38,6 @@ updateB offset old new = let (prefix, maybeSuffix) = B.splitAt offset old
                              padding               = B.replicate (offset - B.length prefix) 0
                              suffix                = B.drop (B.length new) maybeSuffix
                          in B.concat [prefix, padding, new, suffix]
-
-truncateB :: BlockSeek -> Block -> Block
-truncateB = B.take
 
 toChunks :: Block -> BlockSize -> [Block]
 toChunks bytes s 

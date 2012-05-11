@@ -28,8 +28,5 @@
 module SSSFS.Config
        where
 
--- | Fuse ignores st_blksz for many reasons. As there wont be any
--- buffering, for performance sake it is better to leave blockSize ==
--- pageSize (refer to getpagesize).
 blockSize :: Int
-blockSize = 4*1024
+blockSize = 128*1024
