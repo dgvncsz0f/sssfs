@@ -41,6 +41,9 @@ from contextlib        import contextmanager
 def cfg(key, default=None):
     return(os.environ.get("_%s" % key, default))
 
+def debug(msg):
+    print("[debug] %s" % msg)
+
 def skip_on_fail(f):
     def proxy_f(*args, **kwargs):
         try:
@@ -53,11 +56,10 @@ def skip_on_fail(f):
     proxy_f.__name__ = f.__name__
     return(proxy_f)
 
-def debug(msg):
-    print("[debug] %s" % msg)
-
 def system(cmd):
-    p = popen2.Popen3(cmd, capturestderr=True)
+    print("[debug] %s" % " ".join(cmd))
+    p = popen2.Popen4(cmd)
+    print(p.fromchild.read())
     return(p.wait() == 0)
 
 def which(prg):
@@ -88,7 +90,8 @@ def mount():
 
 def umount(handle):
     debug("umount %s" % handle)
-    system((which("fusermount"), "-u", mountpoint(handle)))
+    if (not system((which("fusermount"), "-u", mountpoint(handle)))):
+        system(("lsof", mountpoint(handle)))
     shutil.rmtree(handle, ignore_errors=True)
 
 def silently(f, *args, **kwargs):
@@ -122,7 +125,7 @@ def generic_filepath(mountpt):
             r = os.path.join(mountpt, *args)
         else:
             r = tempfile.mktemp(dir=mountpt)
-        debug("filepath %s" % r)
+        debug("filepath %s" % (r,))
         return(r)
     return(f)
 
@@ -151,12 +154,15 @@ def truncate(f):
 @contextmanager
 def sssfs():
     handle = mount()
-    yield(mountpoint(handle))
-    umount(handle)
+    try:
+        yield(mountpoint(handle))
+    finally:
+        umount(handle)
 
 @contextmanager
 def posix_open(*args, **kwargs):
     fd = os.open(*args, **kwargs)
-    yield(fd)
-    os.close(fd)
-
+    try:
+        yield(fd)
+    finally:
+        os.close(fd)

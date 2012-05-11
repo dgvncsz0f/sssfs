@@ -36,7 +36,7 @@ from test_files import filepath
 
 def test_open_rdonly_should_raise_exception_when_file_does_not_exist():
     f = filepath()
-    assert_raises(OSError, os.open, f, os.O_RDONLY)
+    assert_raises(OSError, lambda: os.close(os.open(f, os.O_RDONLY)))
 
 def test_open_rdonly_should_not_allow_writing():
     f = filepath()
@@ -46,7 +46,7 @@ def test_open_rdonly_should_not_allow_writing():
 
 def test_open_wronly_should_raise_exception_when_file_does_not_exist():
     f = filepath()
-    assert_raises(OSError, os.open, f, os.O_WRONLY)
+    assert_raises(OSError, lambda: os.close(os.open(f, os.O_WRONLY)))
 
 def test_open_truncate_set_size_to_zero():
     f = filepath()
