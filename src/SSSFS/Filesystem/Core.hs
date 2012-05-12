@@ -41,6 +41,7 @@ import           Control.Monad (foldM)
 import           Control.Exception
 import           SSSFS.Storage as S
 import           SSSFS.Except
+import           SSSFS.Config
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Path
 
@@ -76,10 +77,11 @@ follow s l = do { u <- getUnit s l
 -- | Initializes a new filesystem. This is a very fast operation. It
 -- creates a new inode with no contents and changes the root
 -- inode.
-mkfs :: (StorageHashLike s) => s -> IO ()
-mkfs s = do { inum <- mkINode (Just oidOne) Directory
-            ; putUnit_ s (inodeToUnit inum) makeKey
-            }
+mkfs :: (StorageHashLike s) => s -> BlockSize -> IO ()
+mkfs s bsz = do { inum <- mkINode (Just oidOne) Directory bsz
+                ; putBlockSize s bsz
+                ; putUnit_ s (inodeToUnit inum) makeKey
+                }
 
 -- | Creates a new entry on a given directory. The dirname of this
 -- path must already be defined and must be a directory already.
@@ -87,13 +89,13 @@ mkfs s = do { inum <- mkINode (Just oidOne) Directory
 -- This function does not check if there is a link already. It will
 -- get overwritten with no mercy. Make sure you do this before calling
 -- mknod.
-mknod :: (StorageHashLike s) => s -> FilePath -> IType -> IO INode
-mknod s path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
-                        ; inum   <- mkINode Nothing ftype
-                        ; putUnit_ s (inodeToUnit inum) makeKey
-                        ; putUnit_ s (inodeToDirEntUnit (basename path) inum) (makeKeyWithPrefix (iFromINode p_inum))
-                        ; return inum
-                        }
+mknod :: (StorageHashLike s) => s -> BlockSize -> FilePath -> IType -> IO INode
+mknod s bsz path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
+                            ; inum   <- mkINode Nothing ftype bsz
+                            ; putUnit_ s (inodeToUnit inum) makeKey
+                            ; putUnit_ s (inodeToDirEntUnit (basename path) inum) (makeKeyWithPrefix (iFromINode p_inum))
+                            ; return inum
+                            }
   where dir = dirname path
 
 -- | Removes an entry from a given directory. It does not perform any

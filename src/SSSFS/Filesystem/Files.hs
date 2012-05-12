@@ -40,6 +40,7 @@ module SSSFS.Filesystem.Files
 import           Control.Monad
 import qualified Data.ByteString as B
 import           SSSFS.Storage
+import           SSSFS.Config
 import           SSSFS.Filesystem.Types
 import           SSSFS.Filesystem.Core
 import           SSSFS.Filesystem.Blocks
@@ -50,7 +51,8 @@ data FileHandle = FileHandle { unHandle :: INode
 
 -- | Creates a new empty file
 creat :: (StorageHashLike s) => s -> FilePath -> IO FileHandle
-creat s path = do { inum <- mknod s path File
+creat s path = do { bsz  <- getBlockSize s
+                  ; inum <- mknod s bsz path File
                   ; return (FileHandle inum False)
                   }
 

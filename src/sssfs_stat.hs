@@ -31,7 +31,6 @@ import           System.Environment
 import           Control.Exception
 import qualified Data.ByteString as B
 import           Data.Maybe
-import           Data.List (intercalate)
 import           SSSFS.Storage (showKeyS)
 import           SSSFS.Filesystem.Types
 

@@ -120,10 +120,18 @@ fsOpen s path _ flags = exToEither $ sysopen >>= fsync s >>= newIORef
           | trunc flags = open s path >>= flip (ftruncate s) 0
           | otherwise   = open s path
 
-fsInit :: (StorageHashLike s) => s -> IO ()
-fsInit s = do { oldfs <- S.head s keyOne 
-              ; when (not oldfs) (mkfs s)
-              }
+fsInit :: (StorageHashLike s) => s -> FuseConnInfo -> IO FuseConnInfo
+fsInit s conn = do { oldfs <- S.head s keyOne 
+                   ; when (not oldfs) (mkfs s blockSize)
+                   ; return (FuseConnSet { asyncRead    = asyncRead conn
+                                         , maxWrite     = blockSize
+                                         , maxReadAhead = maxReadAhead conn
+                                         , want = [ FuseCapBigWrites
+                                                  , FuseCapAtomicOTrunc
+                                                  ]
+                                         })
+                   }
+  where blockSize = min (512*1024) (maxWrite conn)
 
 fsRead :: (StorageHashLike s) => s -> FilePath -> FHandle -> ByteCount -> FileOffset -> IO (Either Errno B.ByteString)
 fsRead s _ rfh pSize pOffset = exToEither $ readIORef rfh >>= sysread

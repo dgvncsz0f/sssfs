@@ -29,7 +29,6 @@ module Main where
 import           Data.Char
 import           System.Console.GetOpt
 import           System.Environment
-import           SSSFS.Config
 import           SSSFS.Fuse
 import           SSSFS.Fuse.Debug
 import qualified SSSFS.Filesystem.LocalStorage as L
@@ -57,12 +56,8 @@ defaultOptions :: Options
 defaultOptions = Options { rootdir     = ""
                          , mountpt     = ""
                          , optDebug    = False
-                         , optFuseOpts = [ "-o", "atomic_o_trunc"
-                                         , "-o", "big_writes"
-                                         , "-o", "max_write=" ++ maxsz
-                                         ]
+                         , optFuseOpts = []
                          }
-  where maxsz = show blockSize
 
 sssfsOptions :: String -> [String] -> Either String Options
 sssfsOptions prg argv = case (getOpt Permute options argv) 

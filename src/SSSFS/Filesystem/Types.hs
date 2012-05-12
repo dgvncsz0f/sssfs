@@ -91,7 +91,6 @@ import qualified Data.Text as T
 import           Data.Text.Encoding
 import qualified Data.Serialize as S
 import           System.Posix.Clock
-import           SSSFS.Config
 import           SSSFS.Except
 import           SSSFS.Storage
 
@@ -243,21 +242,21 @@ eulavM raw = case (eulav raw)
                 Right u
                   -> return u
 
-mkINode :: Maybe OID -> IType -> IO INode
-mkINode moid ftype = do { time  <- now
-                        ; ioid  <- fmap pure newid
-                        ; boid  <- newid
-                        ; return $ INode { inode  = fromJust (moid <|> ioid)
-                                         , itype  = ftype
-                                         , atime  = time
-                                         , ctime  = time
-                                         , mtime  = time
-                                         , meta   = []
-                                         , size   = 0
-                                         , blksz  = blockSize
-                                         , blocks = (boid, 0)
-                                         }
-                        }
+mkINode :: Maybe OID -> IType -> BlockSize -> IO INode
+mkINode moid ftype bsz = do { time  <- now
+                            ; ioid  <- fmap pure newid
+                            ; boid  <- newid
+                            ; return $ INode { inode  = fromJust (moid <|> ioid)
+                                             , itype  = ftype
+                                             , atime  = time
+                                             , ctime  = time
+                                             , mtime  = time
+                                             , meta   = []
+                                             , size   = 0
+                                             , blksz  = bsz
+                                             , blocks = (boid, 0)
+                                             }
+                            }
 
 inodeToUnit :: INode -> StorageUnit
 inodeToUnit i = let core = [ (encode "inode", inode i)

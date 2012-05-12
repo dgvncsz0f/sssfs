@@ -177,6 +177,10 @@ debugger backend = FuseOperations { fuseGetFileStat =
                                                    ; debugE ("access " ++ f ++ " " ++ show a) result
                                                    ; return result
                                                    }
-                                  , fuseInit = fuseInit backend >> debug "init"
+                                  , fuseInit =
+                                        \f -> do { result <- fuseInit backend f
+                                                 ; debug ("init " ++ (show f) ++ " - " ++ show result)
+                                                 ; return result
+                                                 }
                                   , fuseDestroy = fuseDestroy backend >> debug "destroy"
                                   }

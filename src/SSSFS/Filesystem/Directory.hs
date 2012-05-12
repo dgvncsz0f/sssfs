@@ -39,7 +39,7 @@ import SSSFS.Filesystem.Core
 import SSSFS.Filesystem.Types
 
 mkdir :: (StorageHashLike s) => s -> FilePath -> IO INode
-mkdir s path = mknod s path Directory
+mkdir s path = mknod s 4096 path Directory
 
 rmdir :: (StorageHashLike s, StorageEnumLike s) => s -> FilePath -> IO ()
 rmdir s path = do { empty <- fmap not (enumDir s path)

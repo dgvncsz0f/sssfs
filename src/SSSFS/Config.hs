@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings     #-}
+
 -- Copyright (c) 2012, Diego Souza
 -- All rights reserved.
 -- 
@@ -26,7 +28,20 @@
 
 
 module SSSFS.Config
+       ( putBlockSize
+       , getBlockSize
+       )
        where
 
-blockSize :: Int
-blockSize = 128*1024
+import qualified Data.Serialize as S
+import           SSSFS.Storage
+
+fromRight :: Either b a -> a
+fromRight (Left _)  = error "unexpected left"
+fromRight (Right a) = a
+
+putBlockSize :: (StorageHashLike s) => s -> Int -> IO ()
+putBlockSize s bsz = put s [".config", "blksz"] (S.encode bsz)
+
+getBlockSize :: (StorageHashLike s) => s -> IO Int
+getBlockSize s = fmap (fromRight . S.decode) (get s [".config", "blksz"])
