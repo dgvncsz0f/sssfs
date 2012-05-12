@@ -26,33 +26,33 @@
 
 module SSSFS.Filesystem.LocalStorage
        ( LocalStorage()
-       , new
+       , SSSFS.Filesystem.LocalStorage.new
        , dFromOID
        , iFromOID
        , iFromINode
        , fromDirEnt
        ) where
 
-import           System.FilePath
-import           System.Directory
-import           SSSFS.Storage as S
-import qualified SSSFS.Storage.BerkeleyDB as B
-import qualified SSSFS.Storage.Filesystem as F
-import           SSSFS.Filesystem.Types
+import System.FilePath
+import System.Directory
+import SSSFS.Storage as S
+import SSSFS.Storage.BerkeleyDB as B
+import SSSFS.Storage.Filesystem
+import SSSFS.Filesystem.Types
 
-newtype LocalStorage = LocalStorage { unPack :: (B.BdbStorage, F.FilesystemStorage) }
+newtype LocalStorage = LocalStorage { unPack :: (BdbStorage, FilesystemStorage) }
 
-fstS :: LocalStorage -> B.BdbStorage
+fstS :: LocalStorage -> BdbStorage
 fstS = fst . unPack
 
-sndS :: LocalStorage -> F.FilesystemStorage
+sndS :: LocalStorage -> FilesystemStorage
 sndS = snd . unPack
 
 new :: FilePath -> IO LocalStorage
 new home = do { createDirectoryIfMissing True dbhome
               ; createDirectoryIfMissing True fshome
               ; bdb <- B.new dbhome
-              ; return (LocalStorage (bdb, F.new fshome))
+              ; return (LocalStorage (bdb, FilesystemStorage fshome))
               }
   where dbhome = home </> "db"
         fshome = home </> "fs"

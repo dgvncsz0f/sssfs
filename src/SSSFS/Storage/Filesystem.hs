@@ -31,8 +31,7 @@
 -- filesystem. You generally don't want to use this, except perhaps
 -- for testing purposes.
 module SSSFS.Storage.Filesystem
-       ( FilesystemStorage()
-       , new
+       ( FilesystemStorage(..)
        ) where
 
 import           Control.Exception as C
@@ -50,9 +49,6 @@ newtype FilesystemStorage = FilesystemStorage FilePath
 
 maxSize :: Int
 maxSize = 1 * 1024 * 1024
-
-new :: FilePath -> FilesystemStorage
-new = FilesystemStorage
 
 -- | Relies on POSIX guarantees that a move operation in the same
 -- partition is atomic. You better be using a local filesystem.

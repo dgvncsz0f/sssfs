@@ -88,7 +88,7 @@ install f g = f `catches` [ Handler (\(e :: IOExcept)      -> handlerA e)
         handlerA (NotEmpty _) = g eNOTEMPTY
         handlerA (IsDir _)    = g eISDIR
         
-        handlerB _ = g eFAULT
+        handlerB e = print e >> g eFAULT
 
 exToEither :: IO a -> IO (Either Errno a)
 exToEither f = install (fmap Right f) (return . Left)
