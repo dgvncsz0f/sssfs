@@ -30,9 +30,10 @@ import           Data.Char
 import           System.Console.GetOpt
 import           System.Environment
 import           SSSFS.Fuse
-import           SSSFS.Fuse.Debug
-import qualified SSSFS.Filesystem.LocalStorage as L
-import qualified SSSFS.Storage.Debug as D
+import           SSSFS.Fuse.DebugFuse
+import           SSSFS.Filesystem.LocalStorage
+import           SSSFS.Storage.DebugStorage
+import           SSSFS.Storage.S3Storage
 
 data Options = Options { rootdir     :: String
                        , mountpt     :: String
@@ -74,16 +75,16 @@ main = do { prg   <- getProgName
             of Left err
                  -> error err
                Right opts
-                 -> do { s <- L.new $ rootdir opts
+                 -> do { s <- new $ rootdir opts
                        ; withArgs (fuseOpts opts) $ exec (storage s opts) (fuseDbg opts)
                        }
           }
   where storage s opts
-           | optDebug opts = Left $ D.new s
+           | optDebug opts = Left $ DebugStorage s
            | otherwise     = Right $ s
         
         fuseDbg opts
-          | optDebug opts = debugger
+          | optDebug opts = debugFuse
           | otherwise     = id
 
         fuseOpts opts = optFuseOpts opts ++ [mountpt opts]

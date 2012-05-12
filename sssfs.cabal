@@ -30,6 +30,7 @@ executable sssfs
                  , containers   >=0.4.0.0
                  , uuid         >=1.2.3
                  , unix         >=2.4.2.0
+                 , hS3          >=0.5.6
 
 executable sssfs_stat
   main-is:         sssfs_stat.hs

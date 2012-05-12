@@ -24,57 +24,20 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module SSSFS.Filesystem.LocalStorage
-       ( LocalStorage()
-       , SSSFS.Filesystem.LocalStorage.new
-       , dFromOID
-       , iFromOID
-       , iFromINode
-       , fromDirEnt
+module SSSFS.Filesystem.DoubleStorage
+       ( DoubleStorage()
        ) where
 
-import System.FilePath
-import System.Directory
-import SSSFS.Storage as S
-import SSSFS.Storage.BerkeleyDB as B
-import SSSFS.Storage.Filesystem
-import SSSFS.Filesystem.Types
+import SSSFS.Storage
 
-newtype LocalStorage = LocalStorage { unPack :: (BdbStorage, FilesystemStorage) }
+data DoubleStorage a b = DoubleStorage { cache :: a
+                                       , truth :: b
+                                       }
 
-fstS :: LocalStorage -> BdbStorage
-fstS = fst . unPack
-
-sndS :: LocalStorage -> FilesystemStorage
-sndS = snd . unPack
-
-new :: FilePath -> IO LocalStorage
-new home = do { createDirectoryIfMissing True dbhome
-              ; createDirectoryIfMissing True fshome
-              ; bdb <- B.new dbhome
-              ; return (LocalStorage (bdb, FilesystemStorage fshome))
-              }
-  where dbhome = home </> "db"
-        fshome = home </> "fs"
-
-instance Storage LocalStorage where
+instance (Storage a, Storage b) => Storage (DoubleStorage a b) where
   
-  shutdown = shutdown . fstS
+  shutdown s = shutdown (truth s) >> shutdown (cache s)
 
-instance StorageHashLike LocalStorage where
+instance (StorageHashLike a, StorageHashLike b) => StorageHashLike (DoubleStorage a b) where
   
-  put s k v 
-    | isDirEnt k = put (sndS s) k v >> put (fstS s) k v
-    | otherwise  = put (fstS s) k v
   
-  get s k = get (fstS s) k
-  
-  head s k = S.head (fstS s) k
-  
-  del s k
-    | isDirEnt k = del (sndS s) k >> del (fstS s) k
-    | otherwise  = del (fstS s) k
-
-instance StorageEnumLike LocalStorage where
-
-  enumKeys s k = enumKeys (sndS s) k

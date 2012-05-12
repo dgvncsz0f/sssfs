@@ -25,18 +25,14 @@
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-module SSSFS.Storage.Debug
-       ( DebugStorage()
-       , new
+module SSSFS.Storage.DebugStorage
+       ( DebugStorage(..)
        ) where
 
 import qualified Data.ByteString as B
 import           SSSFS.Storage as S
 
 newtype DebugStorage s = DebugStorage s
-
-new :: s -> DebugStorage s
-new = DebugStorage
 
 debug :: String -> IO ()
 debug m = putStrLn ("[debug.storage] " ++ m)

@@ -26,7 +26,9 @@
 -- OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module SSSFS.Fuse.Debug where
+module SSSFS.Fuse.DebugFuse
+       ( debugFuse
+       ) where
 
 import           Foreign.C.Error
 import           System.Fuse as F
@@ -44,8 +46,8 @@ debugE msg e
 debug :: String -> IO ()
 debug msg = putStrLn $ "[debug.fuse   ] " ++ msg
 
-debugger :: FuseOperations a -> FuseOperations a
-debugger backend = FuseOperations { fuseGetFileStat =
+debugFuse :: FuseOperations a -> FuseOperations a
+debugFuse backend = FuseOperations { fuseGetFileStat =
                                         \f a -> do { result <- fuseGetFileStat backend f a
                                                    ; case a
                                                      of Nothing -> debugEither ("stat " ++ f) (const "") result
