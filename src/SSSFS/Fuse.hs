@@ -123,7 +123,7 @@ fsOpen s path _ flags = exToEither $ sysopen >>= fsync s >>= newIORef
 fsInit :: (StorageHashLike s) => s -> FuseConnInfo -> IO FuseConnInfo
 fsInit s conn = do { oldfs <- S.head s keyOne 
                    ; when (not oldfs) (mkfs s blockSize)
-                   ; return (FuseConnSet { asyncRead    = asyncRead conn
+                   ; return (FuseConnSet { asyncRead    = True
                                          , maxWrite     = blockSize
                                          , maxReadAhead = maxReadAhead conn
                                          , want = [ FuseCapBigWrites

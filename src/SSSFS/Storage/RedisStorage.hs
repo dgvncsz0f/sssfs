@@ -1,6 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable        #-}
-{-# LANGUAGE ExistentialQuantification #-}
-
 -- Copyright (c) 2012, Diego Souza
 -- All rights reserved.
 -- 
@@ -28,47 +25,55 @@
 -- OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-module SSSFS.Except
-       where
+module SSSFS.Storage.RedisStorage
+       ( RedisStorage(..)
+       , new
+       ) where
 
-import           Data.Typeable
 import           Control.Exception
+import           Database.Redis.Redis as R
+import           SSSFS.Except
+import           SSSFS.Storage
 
--- | The mother of all exceptions
-data CFSExcept = forall e. Exception e => CFSExcept e
-               deriving (Typeable)
+data RedisStorage = RedisStorage { conn :: Redis }
 
-data SysExcept = DataCorruptionExcept String
-               | SysExcept String
-               deriving (Show, Typeable)
+new :: String -> String -> Int -> IO RedisStorage
+new host port db = do { redis <- connect host port 
+                      ; _     <- select redis db
+                      ; return (RedisStorage redis)
+                      }
 
-data IOExcept = NotFound String
-              | NotADir String
-              | NotEmpty String
-              | IsDir String
-               deriving (Show, Typeable)
+expectOk :: Reply () -> ()
+expectOk ROk = ()
+expectOk e   = throw (SysExcept $ show e)
 
-isNotFound :: IOExcept -> Bool
-isNotFound (NotFound _) = True
-isNotFound _            = False
+expectBulk :: Reply s -> s
+expectBulk (RBulk (Just s)) = s
+expectBulk (RBulk Nothing)  = throw (NotFound "not found")
+expectBulk _                = throw (SysExcept $ "redis error")
 
-cfsExceptToException :: Exception e => e -> SomeException
-cfsExceptToException = toException . CFSExcept
+expectMult :: Reply s -> [s]
+expectMult (RBulk (Just s))        = [s]
+expectMult (RMulti (Just replies)) = concatMap expectMult replies
+expectMult (RBulk Nothing)         = []
+expectMult (RMulti Nothing)        = []
+expectMult _                       = throw (SysExcept $ "redis error")
 
-cfsExceptFromException :: Exception e => SomeException -> Maybe e
-cfsExceptFromException x = do { CFSExcept e <- fromException x
-                              ; cast e
-                              }
+instance Storage RedisStorage
 
-instance Show CFSExcept where
-  show (CFSExcept e) = show e
-
-instance Exception CFSExcept
-
-instance Exception SysExcept where
-  toException   = cfsExceptToException
-  fromException = cfsExceptFromException
+instance StorageHashLike RedisStorage where
   
-instance Exception IOExcept where
-  toException   = cfsExceptToException
-  fromException = cfsExceptFromException
+  put s k v = fmap expectOk (set (conn s) (showKeyS k) v)
+
+  get s k = fmap expectBulk (R.get (conn s) (showKeyS k))
+  
+  head s k = fmap (== (RInt 1)) (exists (conn s) (showKeyS k))
+  
+  del s k = R.del (conn s) (showKeyS k) >> return ()
+
+instance StorageEnumLike RedisStorage where
+  
+  enumKeys s k = fmap (map makeRef . expectMult) (keys (conn s) keyPrefix)
+    where keyPrefix = showKeyS k ++ "/*"
+          
+          makeRef = ref . drop (length keyPrefix - 1)

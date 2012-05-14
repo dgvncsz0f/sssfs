@@ -58,20 +58,20 @@ fromLazy :: L.ByteString -> B.ByteString
 fromLazy = B.concat . L.toChunks
 
 -- | TODO: deal with redirect errors
-unpackResult :: Either ReqError a -> IO a
+unpackResult :: Either ReqError a -> a
 unpackResult (Left (AWSError "NotFound" m))  = throw (NotFound m)
 unpackResult (Left (AWSError "NoSuchKey" m)) = throw (NotFound m)
 unpackResult (Left e)                        = throw (SysExcept $ show e)
-unpackResult (Right a)                       = return a
+unpackResult (Right a)                       = a
 
 instance Storage S3Storage
 
 instance StorageHashLike S3Storage where
   
-  put s k v = sendObject (conn s) o >>= unpackResult
+  put s k v = fmap unpackResult (sendObject (conn s) o)
     where o = toObject s k v
   
-  get s k = fmap (fromLazy . obj_data) (getObject (conn s) o >>= unpackResult)
+  get s k = fmap (fromLazy . obj_data . unpackResult) (getObject (conn s) o)
     where o = toObject s k B.empty
   
   head s k = do { result <- getObjectInfo (conn s) o
@@ -87,12 +87,12 @@ instance StorageHashLike S3Storage where
                 }
     where o = toObject s k B.empty
   
-  del s k = deleteObject (conn s) o >>= unpackResult
+  del s k = fmap unpackResult (deleteObject (conn s) o)
     where o = toObject s k B.empty
 
 instance StorageEnumLike S3Storage where
   
-  enumKeys s k = do { objects <- listAllObjects (conn s) (bucket s) s3Filter >>= unpackResult
+  enumKeys s k = do { objects <- fmap unpackResult (listAllObjects (conn s) (bucket s) s3Filter)
                     ; return (map makeRef objects)
                     }
     where s3Filter =  ListRequest uriPrefix "" "/" 1000
