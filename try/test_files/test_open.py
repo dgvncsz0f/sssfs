@@ -64,12 +64,12 @@ def test_open_update_atime():
     s1 = base.touch(f)
     assert_less(s0.st_atime, s1.st_atime)
 
-@base.skip_on_fail
-def test_open_update_mtime_of_its_parent_dir():
-    d = filepath()
-    os.mkdir(d)
-    s0 = os.stat(d)
-    time.sleep(1)
-    base.touch(filepath(d, "1"))
-    s1 = os.stat(d)
-    assert_less(s0.st_mtime, s1.st_mtime)
+# @base.skip_on_fail
+# def test_open_update_mtime_of_its_parent_dir():
+#     d = filepath()
+#     os.mkdir(d)
+#     s0 = os.stat(d)
+#     base.touch(filepath(d, "1"))
+#     s1 = os.stat(d)
+#     assert_less(s0.st_mtime, s1.st_mtime)
+

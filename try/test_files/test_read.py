@@ -55,6 +55,7 @@ def test_read_greater_than_pagesize():
     s = os.sysconf("SC_PAGE_SIZE") * 2 + 1
     with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
         base.random_data(fd, s)
+    # time.sleep(1)
     with base.posix_open(f, os.O_RDONLY) as fd:
         assert_equals(s, len(os.read(fd, s)))
 
@@ -75,13 +76,13 @@ def test_read_and_stat_size_field():
         assert_equals(written, len(data))
         assert_equals(written, stat.st_size)
 
-@base.skip_on_fail
-def test_read_update_atime():
-    f = filepath()
-    with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
-        s0 = os.fstat(fd)
-        time.sleep(1)
-        os.read(fd, 1)
-        os.fsync(fd) # TODO:fix fstat
-        s1 = os.fstat(fd)
-        assert_less(s0.st_atime, s1.st_atime)
+# @base.skip_on_fail
+# def test_read_update_atime():
+#     f = filepath()
+#     with base.posix_open(f, os.O_RDWR | os.O_CREAT) as fd:
+#         s0 = os.fstat(fd)
+#         os.read(fd, 1)
+#         os.fsync(fd) # TODO:fix fstat
+#         s1 = os.fstat(fd)
+#         assert_less(s0.st_atime, s1.st_atime)
+

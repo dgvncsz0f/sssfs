@@ -31,9 +31,11 @@ import           System.Console.GetOpt
 import           System.Environment
 import           SSSFS.Fuse
 import           SSSFS.Fuse.DebugFuse
-import           SSSFS.Filesystem.LocalStorage
-import           SSSFS.Storage.DebugStorage
+import           SSSFS.Filesystem.LocalStorage as L
+import           SSSFS.Filesystem.ReplicationStorage as Repl
 import           SSSFS.Storage.S3Storage
+import           SSSFS.Storage.RedisStorage as R
+import           SSSFS.Storage.DebugStorage
 
 data Options = Options { rootdir     :: String
                        , mountpt     :: String
@@ -75,19 +77,20 @@ main = do { prg   <- getProgName
             of Left err
                  -> error err
                Right opts
-                 -> do { s <- new $ rootdir opts
-                       ; withArgs (fuseOpts opts) $ exec (storage s opts) (fuseDbg opts)
+                 -> do { local  <- L.new $ rootdir opts
+                       ; remote <- R.new "localhost" "6379" 0
+                       ; withArgs (fuseOpts opts) $ exec (storage remote local opts) (fuseDbg opts)
                        }
           }
-  where storage s opts
-           | optDebug opts = Left $ DebugStorage s
-           | otherwise     = Right $ s
+  where storage r l opts
+           | optDebug opts = Left $ Repl.new (DebugStorage "master" r) (DebugStorage "slave" l)
+           | otherwise     = Right $ Repl.new r l
         
         fuseDbg opts
           | optDebug opts = debugFuse
           | otherwise     = id
 
         fuseOpts opts = optFuseOpts opts ++ [mountpt opts]
-        
+
         exec (Left s)  = sssfsMain s
         exec (Right s) = sssfsMain s

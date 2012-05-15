@@ -115,7 +115,7 @@ fsStat s path Nothing = exToEither (fmap inodeToFileStat (stat s path))
 fsStat s _ (Just rfh) = exToEither (fmap inodeToFileStat (readIORef rfh >>= fstat s))
 
 fsOpen :: (StorageHashLike s) => s -> FilePath -> OpenMode -> OpenFileFlags -> IO (Either Errno FHandle)
-fsOpen s path _ flags = exToEither $ sysopen >>= fsync s >>= newIORef
+fsOpen s path _ flags = exToEither $ sysopen >>= newIORef
   where sysopen
           | trunc flags = open s path >>= flip (ftruncate s) 0
           | otherwise   = open s path
@@ -151,7 +151,7 @@ fsWrite s _ rfh bytes pOffset = exToEither $ do { fh <- readIORef rfh >>= syswri
 
 fsTruncate :: (StorageHashLike s) => s -> FilePath -> FileOffset -> Maybe FHandle -> IO Errno
 fsTruncate s path pOffset Nothing = exToErrno $ do { fh <- open s path
-                                                   ; _  <- ftruncate s fh (fromIntegral pOffset) >>= fsync s
+                                                   ; _  <- ftruncate s fh (fromIntegral pOffset)
                                                    ; return ()
                                                    }
 fsTruncate s _ pOffset (Just rfh) = exToErrno $ do { fh <- readIORef rfh >>= flip (ftruncate s) (fromIntegral pOffset)
@@ -168,7 +168,7 @@ fsUnlink :: (StorageHashLike s) => s -> FilePath -> IO Errno
 fsUnlink s path = exToErrno $ unlink s path
 
 fsFlush :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO Errno
-fsFlush _ _ _ = return eOK
+fsFlush s path fh = fsFSync s path FullSync fh
 
 fsFSync :: (StorageHashLike s) => s -> FilePath -> SyncType -> FHandle -> IO Errno
 fsFSync s _ _ rfh = exToErrno $ do { fh <- readIORef rfh >>= fsync s
@@ -177,9 +177,7 @@ fsFSync s _ _ rfh = exToErrno $ do { fh <- readIORef rfh >>= fsync s
                                    }
 
 fsRelease :: (StorageHashLike s) => s -> FilePath -> FHandle -> IO ()
-fsRelease s _ rfh = do { _ <- readIORef rfh >>= fsync s
-                       ; return ()
-                       }
+fsRelease _ _ _ = return ()
 
 fsRename :: (StorageHashLike s) => s -> FilePath -> FilePath -> IO Errno
 fsRename s old new = exToErrno $ rename s old new

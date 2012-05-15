@@ -61,3 +61,4 @@ def test_write_update_mtime():
         os.fsync(fd) # TODO:fix fstat
         s1 = os.fstat(fd)
         assert_less(s0.st_mtime, s1.st_mtime)
+

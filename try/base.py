@@ -80,7 +80,7 @@ def mount():
     root = "%s/root" % tmp
     fuse = mountpoint(tmp)
     map(os.mkdir, (root, fuse))
-    cmd  = (project_filepath("dist/build/sssfs/sssfs"), root, fuse)
+    cmd  = (project_filepath("dist/build/sssfs/sssfs"), "--fuse-opt=-o entry_timeout=0", "--fuse-opt=-o negative_timeout=0", "--fuse-opt=-o attr_timeout=0", root, fuse)
     rc = system(cmd)
     if (rc):
         debug("mount %s" % tmp)
@@ -166,3 +166,4 @@ def posix_open(*args, **kwargs):
         yield(fd)
     finally:
         os.close(fd)
+

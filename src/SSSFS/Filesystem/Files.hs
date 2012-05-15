@@ -63,18 +63,20 @@ open s path = do { inum <- fmap (ensureFile path) (stat s path)
                  }
 
 ftruncate :: (StorageHashLike s) => s -> FileHandle -> Seek -> IO FileHandle
-ftruncate s fh0 offset = do { time      <- now
-                            ; (fh',fh1) <- fmap (\x -> (x, unHandle x)) (unshare s fh0 transferF)
-                            ; return (fh' { unHandle = fh1 { mtime = time
-                                                           , ctime = time
-                                                           }
-                                          })
+ftruncate s fh0 offset = do { time <- now
+                            ; fmap (myUtime time) (unshare s fh0 transferF)
                             }
   where fh = unHandle fh0
 
         (blkix, bseek) = address (blksz fh) offset
 
+        myUtime time fh1 = fh1 { unHandle = (unHandle fh1) { mtime = time
+                                                           , ctime = time
+                                                           }
+                               }
+
         transferF = transferOnly blkix bseek
+
 
 fread :: (StorageHashLike s) => s -> FileHandle -> Seek -> Int -> IO (FileHandle, Block)
 fread s fh0 offset sz = do { time <- now

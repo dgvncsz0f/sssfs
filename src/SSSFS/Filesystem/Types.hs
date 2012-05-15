@@ -71,6 +71,8 @@ module SSSFS.Filesystem.Types
        , iFromINode
        , fromDirEnt
        , iFromDirEnt
+       , keyToINode
+       , keyToDBlock
        , fromStorageUnit
        , isDirEnt
        , value
@@ -213,6 +215,14 @@ iFromOID = (fromStr "i" ++) . fromOID
 
 iFromINode :: INode -> Key
 iFromINode = (fromStr "i" ++) . fromOID . inode
+
+keyToINode :: Key -> Bool
+keyToINode ["i",_] = True
+keyToINode _       = False
+
+keyToDBlock :: Key -> Bool
+keyToDBlock ["d",_,_] = True
+keyToDBlock _         = False
 
 isDirEnt :: Key -> Bool
 isDirEnt ["i",_,_] = True

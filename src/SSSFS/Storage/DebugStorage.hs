@@ -32,10 +32,10 @@ module SSSFS.Storage.DebugStorage
 import qualified Data.ByteString as B
 import           SSSFS.Storage as S
 
-newtype DebugStorage s = DebugStorage s
+data DebugStorage s = DebugStorage String s
 
-debug :: String -> IO ()
-debug m = putStrLn ("[debug.storage] " ++ m)
+debug :: String -> String -> IO ()
+debug s m = putStrLn ("[debug.storage:"++ s ++"] " ++ m)
 
 debugValue :: B.ByteString -> String
 debugValue bytes  = show (B.length bytes) ++ " bytes"
@@ -45,48 +45,48 @@ debugValues xs  = show (length xs) ++ " elements"
 
 instance (Storage s) => Storage (DebugStorage s) where
   
-  shutdown (DebugStorage s) = shutdown s >> debug "shutdown"
+  shutdown (DebugStorage n s) = shutdown s >> debug n "shutdown"
 
 instance (StorageHashLike s) => StorageHashLike (DebugStorage s) where
   
-  put (DebugStorage s) k v =
-    do { debug ("put " ++ showKeyS k ++ " - " ++ debugValue v)
+  put (DebugStorage n s) k v =
+    do { debug n ("put " ++ showKeyS k ++ " - " ++ debugValue v)
        ; put s k v
        }
   
-  get (DebugStorage s) k =
+  get (DebugStorage n s) k =
     do { v <- get s k
-       ; debug ("get " ++ showKeyS k ++ " - " ++ debugValue v)
+       ; debug n ("get " ++ showKeyS k ++ " - " ++ debugValue v)
        ; return v
        }
   
-  del (DebugStorage s) k =
-    do { debug ("del " ++ showKeyS k)
+  del (DebugStorage n s) k =
+    do { debug n ("del " ++ showKeyS k)
        ; del s k
        }
   
-  head (DebugStorage s) k =
+  head (DebugStorage n s) k =
     do { v <- S.head s k
-       ; debug ("head " ++ showKeyS k ++ " - " ++ show v)
+       ; debug n ("head " ++ showKeyS k ++ " - " ++ show v)
        ; return v
        }
 
 instance (StorageEnumLike s) => StorageEnumLike (DebugStorage s) where
   
-  enumKeys (DebugStorage s) k =
+  enumKeys (DebugStorage n s) k =
     do { vs <- enumKeys s k
-       ; debug ("enumKeys " ++ showKeyS k ++ " - " ++ debugValues vs)
+       ; debug n ("enumKeys " ++ showKeyS k ++ " - " ++ debugValues vs)
        ; return vs
        }
   
-  enumTest (DebugStorage s) k =
+  enumTest (DebugStorage n s) k =
     do { v <- enumTest s k
-       ; debug ("enumTest " ++ showKeyS k ++ " - " ++ show v)
+       ; debug n ("enumTest " ++ showKeyS k ++ " - " ++ show v)
        ; return v
        }
   
-  enumCount (DebugStorage s) k =
+  enumCount (DebugStorage n s) k =
     do { v <- enumCount s k
-       ; debug ("enumCount " ++ showKeyS k ++ " - " ++ show v)
+       ; debug n ("enumCount " ++ showKeyS k ++ " - " ++ show v)
        ; return v
        }
