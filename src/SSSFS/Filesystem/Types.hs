@@ -69,8 +69,9 @@ module SSSFS.Filesystem.Types
        , iFromOID
        , dFromINode
        , iFromINode
-       , fromStorageUnit
        , fromDirEnt
+       , iFromDirEnt
+       , fromStorageUnit
        , isDirEnt
        , value
        , eulav
@@ -219,6 +220,9 @@ isDirEnt _         = False
 
 fromDirEnt :: OID -> String -> Key
 fromDirEnt o n = iFromOID o ++ fromStr n
+
+iFromDirEnt :: INode -> String -> Key
+iFromDirEnt i n = fromDirEnt (inode i) n
 
 fromStorageUnit :: StorageUnit -> Either Key (OID -> Key)
 fromStorageUnit u = case u

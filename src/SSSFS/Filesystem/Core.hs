@@ -28,6 +28,7 @@
 module SSSFS.Filesystem.Core
        ( mkfs
        , stat
+       , mStat
        , mknod
        , unlink
        , sync
@@ -38,7 +39,7 @@ module SSSFS.Filesystem.Core
 
 import qualified Data.ByteString as B
 import           Control.Monad (foldM)
-import           Control.Exception
+import           Control.Exception as C
 import           SSSFS.Storage as S
 import           SSSFS.Except
 import           SSSFS.Config
@@ -104,7 +105,7 @@ mknod s bsz path ftype = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
 -- and `unlink'.
 unlink :: (StorageHashLike s) => s -> FilePath -> IO ()
 unlink s path = do { p_inum <- fmap (ensureDirectory dir) (stat s dir)
-                   ; del s (fromDirEnt (inode p_inum) name)
+                   ; del s (iFromDirEnt p_inum name)
                    }
   where dir = dirname path
         
@@ -150,6 +151,11 @@ stat s p = do { root <- fmap mUnitToINode (getUnit s keyOne)
               }
   where stat_ inum []        = return inum
         stat_ inum (x:xs)
-          | isDirectory inum = follow s (fromDirEnt (inode inum) x) >>= flip stat_ xs
+          | isDirectory inum = follow s (iFromDirEnt inum x) >>= flip stat_ xs
           | otherwise        = throw (NotADir p)
 
+mStat :: (StorageHashLike s) => s -> FilePath -> IO (Maybe INode)
+mStat s p = C.catch (fmap Just (stat s p)) handler
+  where handler e
+          | isNotFound e = return Nothing
+          | otherwise    = throw e

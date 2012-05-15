@@ -28,6 +28,7 @@
 module SSSFS.Filesystem.Directory
        ( mkdir
        , rmdir
+       , rename
        , readDir
        ) where
 
@@ -37,6 +38,7 @@ import SSSFS.Storage
 import SSSFS.Except
 import SSSFS.Filesystem.Core
 import SSSFS.Filesystem.Types
+import SSSFS.Filesystem.Path
 
 mkdir :: (StorageHashLike s) => s -> FilePath -> IO INode
 mkdir s path = mknod s 4096 path Directory
@@ -47,6 +49,22 @@ rmdir s path = do { empty <- fmap not (enumDir s path)
                     then unlink s path
                     else throw (NotEmpty path)
                   }
+
+rename :: (StorageHashLike s) => s -> FilePath -> FilePath -> IO ()
+rename s opath npath = do { ninum <- mStat s npath
+                          ; if (nothingOrFile ninum)
+                            then renameTo npath
+                            else renameTo (npath </> (basename opath))
+                          }
+  where nothingOrFile (Just x) = isFile x
+        nothingOrFile Nothing  = True
+        
+        renameTo path = do { okey <- fmap (flip iFromDirEnt (basename opath)) (stat s (dirname opath))
+                           ; nkey <- fmap (flip iFromDirEnt (basename path)) (stat s (dirname path))
+                           ; val  <- get s okey
+                           ; put s nkey val
+                           ; del s okey
+                           }
 
 enumDir :: (StorageContext s r) => s -> FilePath -> IO r
 enumDir s path = do { inum <- fmap (ensureDirectory path) (stat s path)

@@ -37,7 +37,7 @@ import           Data.IORef
 import           Foreign.C.Error
 import           System.Fuse as F
 import           System.Posix.Types
-import           System.Posix.Files
+import           System.Posix.Files hiding (rename)
 import qualified Data.ByteString as B
 import           SSSFS.Except
 import           SSSFS.Storage as S
@@ -181,6 +181,9 @@ fsRelease s _ rfh = do { _ <- readIORef rfh >>= fsync s
                        ; return ()
                        }
 
+fsRename :: (StorageHashLike s) => s -> FilePath -> FilePath -> IO Errno
+fsRename s old new = exToErrno $ rename s old new
+
 sssfs :: (Storage s, StorageHashLike s, StorageEnumLike s) => s -> FuseOperations FHandle
 sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
                           , fuseReadSymbolicLink     = \_ -> return (Left eNOSYS)
@@ -190,7 +193,7 @@ sssfs s =  FuseOperations { fuseGetFileStat          = fsStat s
                           , fuseRemoveLink           = fsUnlink s
                           , fuseRemoveDirectory      = fsRmdir s
                           , fuseCreateSymbolicLink   = \_ _ -> return eNOSYS
-                          , fuseRename               = \_ _ -> return eNOSYS
+                          , fuseRename               = fsRename s
                           , fuseCreateLink           = \_ _ -> return eNOSYS
                           , fuseSetFileMode          = \_ _ -> return eOK
                           , fuseSetOwnerAndGroup     = \_ _ _ -> return eOK
